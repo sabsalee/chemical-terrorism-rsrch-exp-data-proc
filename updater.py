@@ -70,8 +70,10 @@ try:
     # Start update process
     try:
         if version_from_local != version_from_releases:
-            print(f'[업데이트] 새로운 업데이트가 발견되어 업데이트를 진행합니다. ({version_from_local} -> {version_from_releases})')
-            time.sleep(2)
+            print(f'[업데이트] 새로운 업데이트가 발견되어 업데이트를 진행합니다. ({version_from_local} -> {version_from_releases})\n')
+            print(response.json()['body'])
+            print('\n5초 뒤 업데이트가 시작됩니다.')
+            time.sleep(5)
             os.makedirs('temp', exist_ok=True)
             download(zipLink, f'{version_from_releases}.zip', 'temp', f'[업데이트] 새로운 버전({version_from_releases})을 다운로드하는 중... ')
             result = extract('temp', f'{version_from_releases}.zip')
