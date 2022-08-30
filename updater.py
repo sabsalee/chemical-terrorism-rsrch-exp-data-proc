@@ -47,7 +47,7 @@ def download(url: str, fname: str, dir='', desc=None, chunk_size=1024):
             bar.update(size)
 
 
-
+isErrorRaised = False
 try:
     # Get program's version
     conf = configparser.ConfigParser()
@@ -75,7 +75,7 @@ try:
             print('\n5초 뒤 업데이트가 시작됩니다.')
             time.sleep(5)
             os.makedirs('temp', exist_ok=True)
-            download(zipLink, f'{version_from_releases}.zip', 'temp', f'[업데이트] 새로운 버전({version_from_releases})을 다운로드하는 중... ')
+            download(zipLink, f'{version_from_releases}.zip', 'temp', f'\n\n[업데이트] 새로운 버전({version_from_releases})을 다운로드하는 중... ')
             result = extract('temp', f'{version_from_releases}.zip')
             file_list = result['orig_file_path_list']
             for i, f in enumerate(tqdm(file_list, desc='[업데이트] 새로운 버전을 설치하는 중... ')):
@@ -87,14 +87,21 @@ try:
             conf['DEFAULT']['recentUpdateDate'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             with open('version.ini', 'w', encoding='utf-8') as cf:
                 conf.write(cf)
-            print('[업데이트] 업데이트 완료!')
+            print('\n[업데이트] 업데이트 완료!')
+            print('10초 뒤 이동합니다.')
+            time.sleep(10)
         else:
             conf['DEFAULT']['lastUpdateCheck'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            print('[업데이트] 최신 버전의 프로그램을 사용 중입니다.')
+            print('\n[업데이트] 최신 버전의 프로그램을 사용 중입니다.')
+            print('5초 뒤 이동합니다.')
+            time.sleep(5)
     except:
         print('[업데이트] 업데이트 진행 중 오류 발생')
+        isErrorRaised = True
 except:
     print('[업데이트] 업데이트 확인 중 오류 발생')
+    isErrorRaised = True
 finally:
-    print('[업데이트] 업데이트 프로그램 종료. 3초 뒤 이동합니다.')
-    time.sleep(3)
+    if isErrorRaised:
+        print('5초 뒤 이동합니다.')
+        time.sleep(5)
