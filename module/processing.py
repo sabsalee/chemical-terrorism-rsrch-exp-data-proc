@@ -10,7 +10,6 @@ from openpyxl.utils.cell import get_column_letter
 from module.timeinfo import TimeInfo
 
 # FIXME: 계측기 편집하면 그래프 y축이 0000.0 으로 나오는데 이거 수정하기
-# FIXME: 파이어베이스 연속해서 올리면 오류나는데 수정하기
 
 class CsvDataSheet:
     def __init__(self, type, name, path) -> None:
@@ -424,18 +423,3 @@ def chart_process(wb:Workbook, csvDataSheet:CsvDataSheet):
 
 if __name__ == "__main__":
     pass
-    # time = TimeInfo()
-    # a = filter_csv_from_dir('/Users/seyun/Downloads/2022-08-21/Data_2022-08-21')
-    # # for e in a:
-    # #     print(e.name)
-    # # raise Exception
-    # testNum = 3
-
-    # print(a[testNum].name)
-    # print(a[testNum].type)
-    # df = preprocess_csv_to_df(a[testNum], time)
-    # wb = dataframe_to_excel(df)
-    # wb = formular_process(wb, a[testNum])
-    # wb = expression_process(wb, a[testNum])
-    # chart_process(wb, a[testNum])
-    # wb.save('/Users/seyun/Downloads/2022-08-21/Data_2022-08-21/test.xlsx')

@@ -9,3 +9,4 @@ __pycache__
 # private files
 /order.pkl
 /version.rtf
+/version.ini
