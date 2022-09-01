@@ -9,14 +9,14 @@ from openpyxl.styles import NamedStyle
 from openpyxl.utils.cell import get_column_letter
 from module.timeinfo import TimeInfo
 
-# FIXME: 계측기 편집하면 그래프 y축이 0000.0 으로 나오는데 이거 수정하기
+
 
 class CsvDataSheet:
     def __init__(self, type, name, path) -> None:
         self.type:str = type
+        self.name:str = name
         self.path:str = path
         self.dirPath:str = path[:-(len(name)+1)]
-        self.name:str = name
 
 
 class TimeInfoNotMatched(Exception):
@@ -36,14 +36,15 @@ def filter_csv_from_dir(dirPath) -> list:
             processed_file_objects.append(CsvDataSheet("dummy", file, f"{dirPath}/{file}"))
         elif "Total" in file:
             processed_file_objects.append(CsvDataSheet("total", file, f"{dirPath}/{file}"))
-        else:
-            processed_file_objects.append(CsvDataSheet("CO2", file, f"{dirPath}/{file}")) # measuring instrument
+        elif 'CO2' in file:
+            processed_file_objects.append(CsvDataSheet("CO2", file, f"{dirPath}/{file}"))
+        elif 'He' in file:
+            processed_file_objects.append(CsvDataSheet("He", file, f"{dirPath}/{file}"))
     return processed_file_objects
 
 
 
 def preprocess_csv_to_df(csvDataSheet:CsvDataSheet, time:TimeInfo) -> pd.DataFrame: # CSV파일 가공하는 함수
-
     if csvDataSheet.type == "dummy":
         df = pd.read_csv(csvDataSheet.path, encoding="CP949")
         df = df.drop([df.columns[5], df.columns[6], df.columns[7]], axis='columns') # 온도, 습도, 대기압 삭제
@@ -96,7 +97,6 @@ def preprocess_csv_to_df(csvDataSheet:CsvDataSheet, time:TimeInfo) -> pd.DataFra
                     del i[1]
                     col["array"] = i
                     col["exist"] = True
-                    # print(col["array"])
                     continue
                 if len(i) > 6:
                     for _ in range(len(i) - 6): # Column이 6개이므로 그 이상은 버리기
@@ -107,6 +107,7 @@ def preprocess_csv_to_df(csvDataSheet:CsvDataSheet, time:TimeInfo) -> pd.DataFra
         ar = np.array(rows)
         df = pd.DataFrame(ar, columns=col["array"])
         df = df.astype({"Temp.":float, "Humidity":float, "CO2":float})
+        df.rename(columns={'CO2':'이산화탄소(ppm)'}, inplace=True)
 
         # 시작 시간 추출
         if time.isExist() == False:
@@ -115,14 +116,12 @@ def preprocess_csv_to_df(csvDataSheet:CsvDataSheet, time:TimeInfo) -> pd.DataFra
             _time = list(map(int, _time.split(':')))
             dateInCell = list(map(int, (df.iloc[0,1].split(" "))[0].split("-")))
             time.set_time("start", datetime(dateInCell[2], dateInCell[0], dateInCell[1], _time[0], _time[1], 0))
-            # print(dateInCell[2], dateInCell[0], dateInCell[1], _time[0], _time[1], 0, sep="|") # TODO: 이거는 나중에 디버그 모니터로 띄우는 것도 괜춘할듯
 
         df = df.drop([df.columns[0]], axis='columns') # 인덱스 삭제
         df[df.columns[0]] = pd.to_datetime(df[df.columns[0]], format="%m-%d-%Y %H:%M:%S") # 측정시간 Datetime으로 변환
         
         try:
             startIndexNum = df[df["TIME"] == time.get_time("start")].index[0] # 시작시간 인덱스 가져오기
-            # print(startIndexNum)
         except:
             raise TimeInfoNotMatched
 
@@ -152,47 +151,32 @@ def dataframe_to_excel(dataframe:pd.DataFrame):
 
 
 
-def formular_process(wb:Workbook, csvDataSheet: CsvDataSheet):
-    # if csvDataSheet.type == "dummy" or csvDataSheet.type == "CO2":
-        try:
-            # 열추가, 수식추가
-            ws = wb.active
-            ws.insert_cols(2, 2)
-            ws["C1"] = "경과시간(s)"
-            for i in range(2, ws.max_row + 1):
-                ws[f"C{i}"] = f"=ROUND((A{i}-$A$2)*24*60*60,0)"
-            return wb
-        except:
-            pass
-    
-    # elif csvDataSheet.type == "total":
-        # try:
-    #         ws = wb.active
-    #         colCount = 2 # 시작 column이 2이고 6씩 더해진다
-    #         for _ in range(10):
-    #             ws.insert_cols(colCount, 2)
-    #             ws[f"{get_column_letter(colCount + 1)}1"] = "경과시간(s)"
-    #             for i in range(2, ws.max_row + 1):
-    #                 ws[f"{get_column_letter(colCount + 1)}{i}"] = f"=ROUND((A{i}-$A$2)*24*60*60,0)"
-    #             colCount += 6
-    #         return wb
-        # except:
-        #     pass
+def formular_process(wb:Workbook):
+    try:
+        # 열추가, 수식추가
+        ws = wb.active
+        ws.insert_cols(2, 2)
+        ws["C1"] = "경과시간(s)"
+        for i in range(2, ws.max_row + 1):
+            ws[f"C{i}"] = f"=ROUND((A{i}-$A$2)*24*60*60,0)"
+        return wb
+    except:
+        pass
 
-def firebase_process(wb: Workbook, type: str) -> dict:
+def firebase_process(wb: Workbook, csvDataSheet: CsvDataSheet, __type: str) -> dict:
     dataDict = {}
     ws = wb.active
 
-    if type == 'total':
-        # 경과시간(s)를 int 타입으로 변경
-        for i in range(2, ws.max_row + 1):
-            diff = ws[f"A{i}"].value - ws["A2"].value
-            ws[f"C{i}"] = diff.seconds
+    # 경과시간(s)를 int 타입으로 변경
+    for i in range(2, ws.max_row + 1):
+        diff = ws[f"A{i}"].value - ws["A2"].value
+        ws[f"C{i}"] = diff.seconds
 
-        # 모든 날짜를 str 타입으로 변경
-        for i in range(2, ws.max_row + 1):
-            ws[f"A{i}"] = ws[f"A{i}"].value.strftime('%H:%M:%S')
+    # 모든 날짜를 str 타입으로 변경
+    for i in range(2, ws.max_row + 1):
+        ws[f"A{i}"] = ws[f"A{i}"].value.strftime('%H:%M:%S')
 
+    if __type == 'total':
         # pandas에서 중복된 column에 붙인 숫자 제거
         alignNum = 4
         for _ in range(10):
@@ -210,9 +194,15 @@ def firebase_process(wb: Workbook, type: str) -> dict:
                 dataDict[f'DUMMY_ID{id+1}'][i] = [row[0],row[2],row[4 + 4*id],row[5 + 4*id],row[6 + 4*id]]
         return dataDict
 
-    elif type == 'CO2':
-        raise Exception
-        return dataDict # FIXME: 이거 데이터 올리는 부분도 수정해야한다.
+    elif __type == 'CO2' or __type == 'He':
+        all = ws.iter_rows(min_row=0, max_row=ws.max_row, min_col=0, max_col=ws.max_column, values_only=True)
+        __si = csvDataSheet.name.rfind('_') + 1
+        __ei = csvDataSheet.name.find('.csv')
+        dataDict[f'{__type}_{csvDataSheet.name[__si:__ei]}'] = {}
+        for i, row in enumerate(all):
+            # 0 - 날짜, 2 - 경과시간, 5 - 타겟가스
+            dataDict[f'{__type}_{csvDataSheet.name[__si:__ei]}'][i] = [row[0],row[2],row[5]]
+        return dataDict
 
 
 
@@ -238,27 +228,20 @@ def expression_process(wb:Workbook, csvDataSheet:CsvDataSheet):
 
         # pandas에서 중복된 column에 붙인 숫자 제거
         alignNum = 4
-        # for _ in range(10):
-        for i in range(1, 11): # 더미에 번호를 붙이고 싶다면,,, 주석을 해제하기
+        for i in range(1, 11):
             ws[f'{get_column_letter(alignNum)}1'] = 'ID'
             ws[f'{get_column_letter(alignNum+1)}1'] = f'ID{i} 산소(%)'
             ws[f'{get_column_letter(alignNum+2)}1'] = f'ID{i} 이산화탄소(ppm)'
             ws[f'{get_column_letter(alignNum+3)}1'] = f'ID{i} 헬륨(%)'
-            # ws[f'{get_column_letter(alignNum)}1'] = 'ID'
-            # ws[f'{get_column_letter(alignNum+1)}1'] = '산소(%)'
-            # ws[f'{get_column_letter(alignNum+2)}1'] = '이산화탄소(ppm)'
-            # ws[f'{get_column_letter(alignNum+3)}1'] = '헬륨(%)'
             alignNum += 4
-
         return wb
     
-    elif csvDataSheet.type == "CO2":
+    elif csvDataSheet.type == "CO2" or csvDataSheet.type == "He":
         dateStyle = NamedStyle(name="datetime", number_format="[$-x-systime]h:mm:ss AM/PM")
         for i in range(2, ws.max_row + 1):
             ws[f"A{i}"].style = dateStyle
         ws.column_dimensions["A"].width = 20
         ws.column_dimensions["C"].width = 10
-
         return wb
         
 
@@ -313,43 +296,9 @@ def chart_process(wb:Workbook, csvDataSheet:CsvDataSheet):
 
         valueTime = Reference(ws, min_row=2, max_row=ws.max_row, min_col=3, max_col=3)
 
-        # 10칸 평행 배치
-        # for _ in range(10):
-        #     valueOxygen = Reference(ws, min_row=1, max_row=ws.max_row, min_col=alignNum + 1, max_col=alignNum + 1)
-        #     valueCarbonDioxide = Reference(ws, min_row=1, max_row=ws.max_row, min_col=alignNum + 2, max_col=alignNum + 2)
-        #     # valueHelium = Reference(ws, min_row=1, max_row=ws.max_row, min_col=alignNum + 3, max_col=alignNum + 3)
-
-        #     ws.column_dimensions[get_column_letter(alignNum)].width = 65
-
-        #     oxygenChart = LineChart()
-        #     oxygenChart.add_data(valueOxygen, titles_from_data=True)
-        #     oxygenChart.set_categories(valueTime)
-        #     # stylesheet
-        #     oxygenChart.x_axis.title = "Time(s)"
-        #     oxygenChart.y_axis.title = "O2(%)"
-        #     oxygenChart.height = 13
-        #     oxygenChart.width = 19
-            
-        #     ws.add_chart(oxygenChart, f"{get_column_letter(alignNum)}2")
-
-        #     carbonDioxideChart = LineChart()
-        #     carbonDioxideChart.add_data(valueCarbonDioxide, titles_from_data=True)
-        #     carbonDioxideChart.set_categories(valueTime)
-        #     # stylesheet
-        #     carbonDioxideChart.x_axis.title = "Time(s)"
-        #     carbonDioxideChart.y_axis.title = "CO2(ppm)"
-        #     carbonDioxideChart.height = 13
-        #     carbonDioxideChart.width = 19
-
-        #     ws.add_chart(carbonDioxideChart, f"{get_column_letter(alignNum)}24")
-            
-        #     alignNum += 4
-        # 10칸 평행배치 끝
-        
-        # 5개 / 5개 하려면 아래를 사용
         row = 2
         col = 4
-        for i in range(10):
+        for _ in range(10):
             valueOxygen = Reference(ws, min_row=1, max_row=ws.max_row, min_col=col + 1, max_col=col + 1)
             valueCarbonDioxide = Reference(ws, min_row=1, max_row=ws.max_row, min_col=col + 2, max_col=col + 2)
             valueHelium = Reference(ws, min_row=1, max_row=ws.max_row, min_col=alignNum + 3, max_col=alignNum + 3)
@@ -390,15 +339,16 @@ def chart_process(wb:Workbook, csvDataSheet:CsvDataSheet):
             ws.add_chart(heliumChart, f"{get_column_letter(alignNum)}{row + 44}")
             
             col += 4
-            # if alignNum >= 20:
-            #     alignNum = 4
-            #     row += 68
-            #     continue
+            # 5*6 배열 사용시 주석해제
+            if alignNum >= 20:
+                alignNum = 4
+                row += 68
+                continue
             alignNum += 4
-        # 5 / 5 여기까지
+            # 5*6 여기까지
             
 
-    elif csvDataSheet.type == "CO2":
+    elif csvDataSheet.type == "CO2" or csvDataSheet.type == "He":
         # 차트추가
         # try:
             ws = wb.active
@@ -410,7 +360,7 @@ def chart_process(wb:Workbook, csvDataSheet:CsvDataSheet):
             carbonDioxideChart.set_categories(valueTime)
             # stylesheet
             carbonDioxideChart.x_axis.title = "Time(s)"
-            carbonDioxideChart.y_axis.title = "CO2(ppm)"
+            carbonDioxideChart.y_axis.title = '이산화탄소(ppm)' if csvDataSheet.type == 'CO2' else '헬륨(%)'
             carbonDioxideChart.height = 13
             carbonDioxideChart.width = 19
 

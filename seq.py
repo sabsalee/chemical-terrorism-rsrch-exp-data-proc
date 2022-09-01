@@ -1,6 +1,7 @@
 from module.processing import *
 from module.firebaseupload import *
 import pickle, os
+import configparser
 
 
 
@@ -15,8 +16,11 @@ def clear():
 
 
 clear()
-print('''
-화학테러 논문조 더미 및 계측기 데이터 가공 프로그램
+conf = configparser.ConfigParser()
+conf.read('version.ini', encoding='utf-8')
+version = conf['DEFAULT']['version']
+print(f'''
+화학테러 논문조 더미 및 계측기 데이터 가공 프로그램 ({version})
 
 - 이 프로그램을 통해 CSV파일을 엑셀파일로 가공하게 됩니다.
 - 실험 결과 정리를 위해서 이 프로그램으로 가공된 데이터는 서버에 업로드 됩니다.
@@ -103,21 +107,15 @@ while True:
             wb = dataframe_to_excel(df)
             print('|||', end='')
 
-            wb = formular_process(wb, e)
+            wb = formular_process(wb)
             print('|||', end='')
 
-            if e.type == "total" and rtdb != None:
-                dataDict = firebase_process(wb, e.type)
+            if e.type != "dummy" and rtdb != None: # dummy 데이터 외(dummy는 total로만) 백업하기
+                dataDict = firebase_process(wb, e, e.type)
                 print('|||', end='')
 
-                rtdb.upload_dummy(time, order, dataDict)
+                rtdb.upload_dummy(time, order, dataDict, e.type)
                 print('|||', end='')
-            # elif e.type == "CO2" and rtdb != None: # FIXME: 여기 계측기 늘어나면 수정
-            #     dataDict = firebase_process(wb, e.type)
-            #     print('|||', end='')
-
-            #     rtdb.upload_dummy(time, order, dataDict)
-            #     print('|||', end='')
             else:
                 print('||||||', end='')
 

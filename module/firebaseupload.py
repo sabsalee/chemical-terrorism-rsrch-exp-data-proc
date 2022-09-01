@@ -13,22 +13,28 @@ class Database:
             'databaseURL': 'https://chemical-terrorism-research-default-rtdb.firebaseio.com/'
         })
 
-    def upload_dummy(self, time:TimeInfo, order:int, dataDict:dict):
+    def upload_dummy(self, time:TimeInfo, order:int, dataDict:dict, __type:str):
         orderRef = db.reference(f'order/{order}')
         dataRef = db.reference(f'order/{order}/data')
-        isExistVailidateRef = db.reference(f'order/{order}/data/DUMMY_ID1/0')
 
-        isExistVailidateValue = isExistVailidateRef.get()
+        if __type == 'total':
+            __isExistVailidateRef = db.reference(f'order/{order}/data/DUMMY_ID1/0')
+            __isExistVailidateValue = __isExistVailidateRef.get()
+        elif __type == 'CO2':
+            __isExistVailidateRef = db.reference(f'order/{order}/data/CO2_1/0') # TODO: 키값만 받아올 수 있는 API가 있다면?
+            __isExistVailidateValue = __isExistVailidateRef.get()
+        elif __type == 'He':
+            __isExistVailidateRef = db.reference(f'order/{order}/data/He_1/0')
+            __isExistVailidateValue = __isExistVailidateRef.get()
         
         # 중복된 값이 있다면 
-        if isExistVailidateValue != None:
+        if __isExistVailidateValue != None:
             print(f'\r이미 [{order}차] 실험 결과가 인터넷 데이터베이스에 있습니다. 그래도 올리시겠습니까?')
             while True:
                 cmd = input('(Y/N) >')
                 if cmd == "Y" or cmd == "y" or cmd == "N" or cmd == "n":
                     break
                 print('잘못 입력하셨습니다. Y 또는 N 을 입력해주세요.')
-            # 이제 선택지에 따라서 올릴지 말지 결정하는 부분을 코딩하면 될 것 같다.
             if cmd == "Y" or cmd == "y":
                 self.__backup_data(order)
                 self.__upload(time, orderRef, dataRef, dataDict, update=True)
@@ -37,15 +43,11 @@ class Database:
         else:
             self.__upload(time, orderRef, dataRef, dataDict)    
 
-
-    def upload_meter(self, gasType):
-        pass
-
     # 업로드 내부함수
     def __upload(self, time: TimeInfo, orderRef: db.Reference, dataRef: db.Reference, dataDict: db.Reference, update=False):
         orderRef.update({'date':time.get_time('start').strftime('%Y-%m-%d')})
         if update:
-            orderRef.update({'updateAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
+            orderRef.update({'updatedAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
             print('||||||||||||', end='')
         else:
             orderRef.update({'createdAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
@@ -59,14 +61,6 @@ class Database:
             uploadedAt = db.reference(f'order/{order}/createdAt').get()
         backupAt = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         data = db.reference(f'order/{order}/data').get()
-
-        # print(f'''
-        # date: {date}
-        # uploadedAt: {uploadedAt}
-        # backupAt: {backupAt}
-        # data: {data}
-        # ''')
-        # input()
 
         backupRef = db.reference(f'order/{order}/backup')
         backedUpData = backupRef.get()

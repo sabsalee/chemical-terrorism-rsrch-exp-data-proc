@@ -8,6 +8,12 @@ from tqdm import tqdm
 
 
 
+def clear():
+    if os.name in ('nt', 'dos'):
+        os.system('cls')
+    else:
+        os.system('clear')
+
 def extract(path, filename) -> dict:
     with zipfile.ZipFile(f'{path}/{filename}', 'r') as zf:
         for member in tqdm(zf.infolist(), desc='[업데이트] 받은 파일 압축 해제하는 중... '):
@@ -48,6 +54,7 @@ def download(url: str, fname: str, dir='', desc=None, chunk_size=1024):
 
 
 isErrorRaised = False
+clear()
 try:
     # Get program's version
     conf = configparser.ConfigParser()
@@ -71,9 +78,11 @@ try:
     try:
         if version_from_local != version_from_releases:
             print(f'[업데이트] 새로운 업데이트가 발견되어 업데이트를 진행합니다. ({version_from_local} -> {version_from_releases})\n')
-            print(response.json()['body'])
-            print('\n5초 뒤 업데이트가 시작됩니다.')
-            time.sleep(5)
+            print(f'''============================================
+            response.json()['body']
+            ============================================''')
+            print('\n10초 뒤 업데이트가 시작됩니다.')
+            time.sleep(10)
             os.makedirs('temp', exist_ok=True)
             download(zipLink, f'{version_from_releases}.zip', 'temp', f'\n\n[업데이트] 새로운 버전({version_from_releases})을 다운로드하는 중... ')
             result = extract('temp', f'{version_from_releases}.zip')
