@@ -3,12 +3,9 @@ from firebase_admin import db, credentials
 from module.timeinfo import TimeInfo
 from datetime import datetime
 
-# devPath = '/Users/seyun/Library/Mobile Documents/com~apple~CloudDocs/Dev/Python/Project/Report_Data_Processing/'
-
 class Database:
     def __init__(self) -> None:
         cred = credentials.Certificate('key/chemical-terrorism-research-firebase-rtdb-key.json')
-        # cred = credentials.Certificate(devPath + 'chemical-terrorism-research-firebase-rtdb-key.json')
         firebase_admin.initialize_app(cred, {
             'databaseURL': 'https://chemical-terrorism-research-default-rtdb.firebaseio.com/'
         })
