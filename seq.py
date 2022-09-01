@@ -2,6 +2,7 @@ from module.processing import *
 from module.firebaseupload import *
 import pickle, os
 import configparser
+from tqdm import tqdm
 
 
 
@@ -99,36 +100,48 @@ while True:
 
     for i, e in enumerate(lists):
         try:
-            print(f'[{i+1}/{len(lists)}] {e.name}')
+            bar = tqdm(total = 100, desc=f'[{i+1}/{len(lists)}] {e.name}', bar_format='{desc:30.28}{percentage:3.0f}%|{bar:30}|', smoothing=1)
+            # print(f'[{i+1}/{len(lists)}] {e.name}')
 
             df = preprocess_csv_to_df(e, time)
-            print('|||', end='')
+            # print('|||', end='')
+            bar.update(20)
 
             wb = dataframe_to_excel(df)
-            print('|||', end='')
+            # print('|||', end='')
+            bar.update(10)
 
             wb = formular_process(wb)
-            print('|||', end='')
+            # print('|||', end='')
+            bar.update(10)
 
             if e.type != "dummy" and rtdb != None: # dummy 데이터 외(dummy는 total로만) 백업하기
                 dataDict = firebase_process(wb, e, e.type)
-                print('|||', end='')
+                # print('|||', end='')
+                bar.update(10)
 
                 rtdb.upload_dummy(time, order, dataDict, e.type)
-                print('|||', end='')
+                # print('|||', end='')
+                bar.update(20)
             else:
-                print('||||||', end='')
+                # print('||||||', end='')
+                bar.update(30)
 
             wb = expression_process(wb, e)
-            print('|||', end='')
+            # print('|||', end='')
+            bar.update(10)
 
             chart_process(wb, e)
-            print('|||', end='')
+            # print('|||', end='')
+            bar.update(10)
 
             wb.save(f"{e.dirPath}/{e.name[:-4]}.xlsx")
-            print('||| OK!', end='\n\n')
+            # print('||| OK!', end='\n\n')
+            bar.update(10)
+            bar.close()
 
         except Exception as err:
+            bar.close()
             errCount += 1
             print('\r[오류] ', end='')
             print(err)

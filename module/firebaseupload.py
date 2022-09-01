@@ -28,7 +28,7 @@ class Database:
         if __isExistVailidateValue != None:
             print(f'\r이미 [{order}차] 실험 결과가 인터넷 데이터베이스에 있습니다. 그래도 올리시겠습니까?')
             while True:
-                cmd = input('(Y/N) >')
+                cmd = input('[Y/N] >')
                 if cmd == "Y" or cmd == "y" or cmd == "N" or cmd == "n":
                     break
                 print('잘못 입력하셨습니다. Y 또는 N 을 입력해주세요.')
@@ -36,7 +36,8 @@ class Database:
                 self.__backup_data(order)
                 self.__upload(time, orderRef, dataRef, dataDict, update=True)
             else:
-                print('\r\r데이터 업로드를 건너뜁니다.\n||||||||||||', end='')
+                # print('\r\r데이터 업로드를 건너뜁니다.\n||||||||||||', end='')
+                print('\r\r데이터 업로드를 건너뜁니다.\n', end='')
         else:
             self.__upload(time, orderRef, dataRef, dataDict)    
 
@@ -45,7 +46,7 @@ class Database:
         orderRef.update({'date':time.get_time('start').strftime('%Y-%m-%d')})
         if update:
             orderRef.update({'updatedAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
-            print('||||||||||||', end='')
+            # print('||||||||||||', end='')
         else:
             orderRef.update({'createdAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
         dataRef.update(dataDict)

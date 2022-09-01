@@ -78,9 +78,9 @@ try:
     try:
         if version_from_local != version_from_releases:
             print(f'[업데이트] 새로운 업데이트가 발견되어 업데이트를 진행합니다. ({version_from_local} -> {version_from_releases})\n')
-            print(f'============================================')
+            print(f'\n============================================\n')
             print(response.json()['body'])
-            print(f'============================================')
+            print(f'\n============================================\n')
             print('\n10초 뒤 업데이트가 시작됩니다.')
             time.sleep(10)
             os.makedirs('temp', exist_ok=True)

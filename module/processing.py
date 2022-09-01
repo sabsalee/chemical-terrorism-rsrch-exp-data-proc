@@ -86,7 +86,7 @@ def preprocess_csv_to_df(csvDataSheet:CsvDataSheet, time:TimeInfo) -> pd.DataFra
         df = df.iloc[:indexCount]
         return df
 
-    elif csvDataSheet.type == "CO2":
+    elif csvDataSheet.type == "CO2" or csvDataSheet.type == "He":
         # csv 전처리 후 numpy Array로 변환하여 DataFrame 생성
         rows = []
         col = {"exist": False, "array": []}
@@ -96,6 +96,7 @@ def preprocess_csv_to_df(csvDataSheet:CsvDataSheet, time:TimeInfo) -> pd.DataFra
                 if col["exist"] == False:
                     del i[1]
                     col["array"] = i
+                    col["array"] = list(filter(len, col["array"]))
                     col["exist"] = True
                     continue
                 if len(i) > 6:
@@ -106,8 +107,9 @@ def preprocess_csv_to_df(csvDataSheet:CsvDataSheet, time:TimeInfo) -> pd.DataFra
                 rows.append(i)
         ar = np.array(rows)
         df = pd.DataFrame(ar, columns=col["array"])
-        df = df.astype({"Temp.":float, "Humidity":float, "CO2":float})
-        df.rename(columns={'CO2':'이산화탄소(ppm)'}, inplace=True)
+        df = df.astype({"Temp.":float, "Humidity":float})
+        df = df.astype({'CO2':float} if csvDataSheet.type == 'CO2' else {'He':float})
+        df.rename(columns={'CO2':'이산화탄소(ppm)'} if csvDataSheet.type == 'CO2' else {'He':'헬륨(%)'}, inplace=True)
 
         # 시작 시간 추출
         if time.isExist() == False:
