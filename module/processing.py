@@ -30,17 +30,28 @@ def filter_csv_from_dir(dirPath) -> list:
     # 경로안에 있는 유효한 파일들 걸러내기
     fileList = os.listdir(dirPath)
     csvList = [e for e in fileList if ".csv" in e[-4:]]
+    # 시간 정보 생성을 위해 파일 존재 확인하기
+    isTimeinfoFileExist = False
     # 유효한 파일의 이름으로 이 데이터의 종류 결정하기
     for file in csvList:
         if "ID" in file:
             processed_file_objects.append(CsvDataSheet("dummy", file, f"{dirPath}/{file}"))
+            if not isTimeinfoFileExist:
+                isTimeinfoFileExist = True
         elif "Total" in file:
             processed_file_objects.append(CsvDataSheet("total", file, f"{dirPath}/{file}"))
+            if not isTimeinfoFileExist:
+                isTimeinfoFileExist = True
         elif 'CO2' in file:
             processed_file_objects.append(CsvDataSheet("CO2", file, f"{dirPath}/{file}"))
         elif 'He' in file:
             processed_file_objects.append(CsvDataSheet("He", file, f"{dirPath}/{file}"))
-    return processed_file_objects
+    if isTimeinfoFileExist and ("dummy" != processed_file_objects[0].type or "total" != processed_file_objects[0].type):
+        for i, csvDatasheet in enumerate(processed_file_objects):
+            if "dummy" == csvDatasheet.type or "total" == csvDatasheet.type:
+                del processed_file_objects[i]
+                processed_file_objects.insert(0, csvDatasheet)
+    return [isTimeinfoFileExist, processed_file_objects]
 
 
 
@@ -52,13 +63,13 @@ def preprocess_csv_to_df(csvDataSheet:CsvDataSheet, time:TimeInfo) -> pd.DataFra
 
         # 시작 시간 추출
         if time.isExist() == False:
-            time.set_time("start", df.iloc[0,0])
+            time.set_time(df.iloc[0,0])
         
 
         indexCount = 0 # 범위에 포함되는 인덱스 잘라내기 위한 변수
         for i in range(df.shape[0]):
             diff = df.iloc[i,0] - df.iloc[0,0]
-            if diff.seconds > 600:
+            if diff.seconds > time.get_duration():
                 break
             indexCount += 1
         df = df.iloc[:indexCount]
@@ -75,12 +86,12 @@ def preprocess_csv_to_df(csvDataSheet:CsvDataSheet, time:TimeInfo) -> pd.DataFra
 
         # 시작 시간 추출
         if time.isExist() == False:
-            time.set_time("start", df.iloc[0,0])
+            time.set_time(df.iloc[0,0])
 
         indexCount = 0 # 범위에 포함되는 인덱스 잘라내기 위한 변수
         for i in range(df.shape[0]):
             diff = df.iloc[i,0] - df.iloc[0,0]
-            if diff.seconds > 600:
+            if diff.seconds > time.get_duration():
                 break
             indexCount += 1
         df = df.iloc[:indexCount]
@@ -113,25 +124,22 @@ def preprocess_csv_to_df(csvDataSheet:CsvDataSheet, time:TimeInfo) -> pd.DataFra
 
         # 시작 시간 추출
         if time.isExist() == False:
-            print("실험 시작시간을 입력해주세요 ( 예시[14시 8분] -> 14:8 )")
-            _time = input("> ")
-            _time = list(map(int, _time.split(':')))
             dateInCell = list(map(int, (df.iloc[0,1].split(" "))[0].split("-")))
-            time.set_time("start", datetime(dateInCell[2], dateInCell[0], dateInCell[1], _time[0], _time[1], 0))
+            time.set_time(datetime(dateInCell[2], dateInCell[0], dateInCell[1], time.timedatalist[0], time.timedatalist[1], 0))
 
         df = df.drop([df.columns[0]], axis='columns') # 인덱스 삭제
         df[df.columns[0]] = pd.to_datetime(df[df.columns[0]], format="%m-%d-%Y %H:%M:%S") # 측정시간 Datetime으로 변환
         
         try:
-            startIndexNum = df[df["TIME"] == time.get_time("start")].index[0] # 시작시간 인덱스 가져오기
+            startIndexNum = df[df["TIME"] == time.get_time()].index[0] # 시작시간 인덱스 가져오기
         except:
             raise TimeInfoNotMatched
 
         indexCount = 0 # 범위에 포함되는 인덱스 잘라내기 위한 변수
         for i in range(startIndexNum, df.shape[0]):
             diff = df.iloc[i,0] - df.iloc[startIndexNum,0]
-            if diff.seconds > 600:
-                # print(f"600초를 넘어 정지된 시점 : {df.iloc[i,0]}") # FOR DEBUG
+            if diff.seconds > time.get_duration():
+                # print(f"{time.get_duration()}초를 넘어 정지된 시점 : {df.iloc[i,0]}") # FOR DEBUG
                 break
             # print(f"[{startIndexNum + indexCount}] {df.iloc[i,0].strftime('%H:%M:%S')}는 시작시간 {df.iloc[startIndexNum,0].strftime('%H:%M:%S')}과의 차가 {diff}초 입니다.") # FOR DEBUG
             indexCount += 1
@@ -367,10 +375,6 @@ def chart_process(wb:Workbook, csvDataSheet:CsvDataSheet):
             carbonDioxideChart.width = 19
 
             ws.add_chart(carbonDioxideChart, "B6")
-
-
-
-
 
 
 if __name__ == "__main__":

@@ -52,65 +52,67 @@ def download(url: str, fname: str, dir='', desc=None, chunk_size=1024):
             size = file.write(data)
             bar.update(size)
 
-
-isErrorRaised = False
-clear()
-try:
-    # Get program's version
-    conf = configparser.ConfigParser()
-    print('[업데이트] 프로그램의 버전을 확인하는 중...')
+def main():
+    isErrorRaised = False
+    clear()
     try:
-        conf.read('version.ini', encoding='utf-8')
-        version_from_local = conf['DEFAULT']['version']
+        # Get program's version
+        conf = configparser.ConfigParser()
+        try:
+            conf.read('version.ini', encoding='utf-8')
+            version_from_local = conf['DEFAULT']['version']
+        except:
+            print('[업데이트] 경고! 프로그램 버전 정보가 없습니다! 최신 버전으로 업데이트 합니다.')
+            version_from_local = 'v0.0.0'
+            conf['DEFAULT'] = {}
+            conf['DEFAULT']['version'] = version_from_local
+
+        # Get latest version from github releases
+        print('[업데이트] 인터넷에서 최신 버전의 업데이트 확인 중...')
+        response = requests.get("https://api.github.com/repos/sabsalee/chemical-terrorism-rsrch-exp-data-proc/releases/latest")
+        version_from_releases = response.json()['tag_name']
+        zipLink = response.json()['zipball_url']
+        
+        # Start update process
+        try:
+            if version_from_local != version_from_releases:
+                print(f'[업데이트] 새로운 업데이트가 발견되어 업데이트를 진행합니다. ({version_from_local} -> {version_from_releases})\n')
+                print(f'\n============================================\n')
+                print(response.json()['body'])
+                print(f'\n============================================\n')
+                print('\n10초 뒤 업데이트가 시작됩니다.')
+                time.sleep(10)
+                os.makedirs('temp', exist_ok=True)
+                download(zipLink, f'{version_from_releases}.zip', 'temp', f'\n\n[업데이트] 새로운 버전({version_from_releases})을 다운로드하는 중... ')
+                result = extract('temp', f'{version_from_releases}.zip')
+                file_list = result['orig_file_path_list']
+                for i, f in enumerate(tqdm(file_list, desc='[업데이트] 새로운 버전을 설치하는 중... ')):
+                    shutil.move(f'temp/{f}', f'{result["dest_file_path_list"][i]}')
+                print('[업데이트] 업데이트 마무리하는 중...')
+                shutil.rmtree('temp', ignore_errors=True)
+                conf['DEFAULT']['version'] = version_from_releases
+                conf['DEFAULT']['lastUpdateCheck'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                conf['DEFAULT']['recentUpdateDate'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                with open('version.ini', 'w', encoding='utf-8') as cf:
+                    conf.write(cf)
+                print('\n[업데이트] 업데이트 완료!')
+                print('10초 뒤 이동합니다.')
+                time.sleep(10)
+            else:
+                conf['DEFAULT']['lastUpdateCheck'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                print('\n[업데이트] 최신 버전의 프로그램을 사용 중입니다.')
+                print('5초 뒤 이동합니다.')
+                time.sleep(5)
+        except:
+            print('[업데이트] 업데이트 진행 중 오류 발생')
+            isErrorRaised = True
     except:
-        print('[업데이트] 경고! 프로그램 버전 정보가 없습니다! 최신 버전으로 업데이트 합니다.')
-        version_from_local = 'v0.0.0'
-        conf['DEFAULT'] = {}
-        conf['DEFAULT']['version'] = version_from_local
-
-    # Get latest version from github releases
-    print('[업데이트] 인터넷에서 최신 버전의 업데이트 확인 중...')
-    response = requests.get("https://api.github.com/repos/sabsalee/chemical-terrorism-rsrch-exp-data-proc/releases/latest")
-    version_from_releases = response.json()['tag_name']
-    zipLink = response.json()['zipball_url']
-    
-    # Start update process
-    try:
-        if version_from_local != version_from_releases:
-            print(f'[업데이트] 새로운 업데이트가 발견되어 업데이트를 진행합니다. ({version_from_local} -> {version_from_releases})\n')
-            print(f'\n============================================\n')
-            print(response.json()['body'])
-            print(f'\n============================================\n')
-            print('\n10초 뒤 업데이트가 시작됩니다.')
-            time.sleep(10)
-            os.makedirs('temp', exist_ok=True)
-            download(zipLink, f'{version_from_releases}.zip', 'temp', f'\n\n[업데이트] 새로운 버전({version_from_releases})을 다운로드하는 중... ')
-            result = extract('temp', f'{version_from_releases}.zip')
-            file_list = result['orig_file_path_list']
-            for i, f in enumerate(tqdm(file_list, desc='[업데이트] 새로운 버전을 설치하는 중... ')):
-                shutil.move(f'temp/{f}', f'{result["dest_file_path_list"][i]}')
-            print('[업데이트] 업데이트 마무리하는 중...')
-            shutil.rmtree('temp', ignore_errors=True)
-            conf['DEFAULT']['version'] = version_from_releases
-            conf['DEFAULT']['lastUpdateCheck'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            conf['DEFAULT']['recentUpdateDate'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            with open('version.ini', 'w', encoding='utf-8') as cf:
-                conf.write(cf)
-            print('\n[업데이트] 업데이트 완료!')
-            print('10초 뒤 이동합니다.')
-            time.sleep(10)
-        else:
-            conf['DEFAULT']['lastUpdateCheck'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            print('\n[업데이트] 최신 버전의 프로그램을 사용 중입니다.')
+        print('[업데이트] 업데이트 확인 중 오류 발생')
+        isErrorRaised = True
+    finally:
+        if isErrorRaised:
             print('5초 뒤 이동합니다.')
             time.sleep(5)
-    except:
-        print('[업데이트] 업데이트 진행 중 오류 발생')
-        isErrorRaised = True
-except:
-    print('[업데이트] 업데이트 확인 중 오류 발생')
-    isErrorRaised = True
-finally:
-    if isErrorRaised:
-        print('5초 뒤 이동합니다.')
-        time.sleep(5)
+
+if __name__ == '__main__':
+    pass

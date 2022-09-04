@@ -9,23 +9,26 @@ class Database:
         firebase_admin.initialize_app(cred, {
             'databaseURL': 'https://chemical-terrorism-research-default-rtdb.firebaseio.com/'
         })
+        self.forceUpload = None
 
-    def upload_dummy(self, time:TimeInfo, order:int, dataDict:dict, __type:str):
-        orderRef = db.reference(f'order/{order}')
-        dataRef = db.reference(f'order/{order}/data')
+    def upload_dummy(self, time:TimeInfo, order:int, dataDict:dict, __type:str): # 단순히 forceUpload로 비교할게 아니라 그 타입에 맞춰서 비교해야 될 것 같기도하고 아니면 처음부터 물어보던지 선택해야함. 현재는 최초 한번의 물음으로 전체가 결정
+        __isExistVailidateValue = None
+        if self.forceUpload == None:
+            orderRef = db.reference(f'order/{order}')
+            dataRef = db.reference(f'order/{order}/data')
 
-        if __type == 'total':
-            __isExistVailidateRef = db.reference(f'order/{order}/data/DUMMY_ID1/0')
-            __isExistVailidateValue = __isExistVailidateRef.get()
-        elif __type == 'CO2':
-            __isExistVailidateRef = db.reference(f'order/{order}/data/CO2_1/0') # TODO: 키값만 받아올 수 있는 API가 있다면?
-            __isExistVailidateValue = __isExistVailidateRef.get()
-        elif __type == 'He':
-            __isExistVailidateRef = db.reference(f'order/{order}/data/He_1/0')
-            __isExistVailidateValue = __isExistVailidateRef.get()
+            if __type == 'total':
+                __isExistVailidateRef = db.reference(f'order/{order}/data/DUMMY_ID1/0')
+                __isExistVailidateValue = __isExistVailidateRef.get()
+            elif __type == 'CO2':
+                __isExistVailidateRef = db.reference(f'order/{order}/data/CO2_1/0') # TODO: 키값만 받아올 수 있는 API가 있다면?
+                __isExistVailidateValue = __isExistVailidateRef.get()
+            elif __type == 'He':
+                __isExistVailidateRef = db.reference(f'order/{order}/data/He_1/0')
+                __isExistVailidateValue = __isExistVailidateRef.get()
         
         # 중복된 값이 있다면 
-        if __isExistVailidateValue != None:
+        if __isExistVailidateValue != None and self.forceUpload == None:
             print(f'\r이미 [{order}차] 실험 결과가 인터넷 데이터베이스에 있습니다. 그래도 올리시겠습니까?')
             while True:
                 cmd = input('[Y/N] >')
@@ -33,11 +36,15 @@ class Database:
                     break
                 print('잘못 입력하셨습니다. Y 또는 N 을 입력해주세요.')
             if cmd == "Y" or cmd == "y":
+                self.forceUpload = True
                 self.__backup_data(order)
                 self.__upload(time, orderRef, dataRef, dataDict, update=True)
             else:
+                self.forceUpload = False
                 # print('\r\r데이터 업로드를 건너뜁니다.\n||||||||||||', end='')
                 print('\r\r데이터 업로드를 건너뜁니다.\n', end='')
+        elif not self.forceUpload:
+            pass
         else:
             self.__upload(time, orderRef, dataRef, dataDict)    
 
@@ -81,3 +88,6 @@ class Database:
                     'data':data
                 }
             })
+
+if __name__ == '__main__':
+    pass
