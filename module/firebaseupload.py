@@ -11,7 +11,7 @@ class Database:
         })
         self.forceUpload = None
 
-    def upload_dummy(self, time:TimeInfo, order:int, dataDict:dict, __type:str): # 단순히 forceUpload로 비교할게 아니라 그 타입에 맞춰서 비교해야 될 것 같기도하고 아니면 처음부터 물어보던지 선택해야함. 현재는 최초 한번의 물음으로 전체가 결정
+    def upload_dummy(self, time:TimeInfo, order:int, dataDict:dict, __type:str): # FIXME: 단순히 forceUpload로 비교할게 아니라 그 타입에 맞춰서 비교해야 될 것 같기도하고 아니면 처음부터 물어보던지 선택해야함. 현재는 최초 한번의 물음으로 전체가 결정
         __isExistVailidateValue = None
         if self.forceUpload == None:
             orderRef = db.reference(f'order/{order}')
@@ -41,7 +41,6 @@ class Database:
                 self.__upload(time, orderRef, dataRef, dataDict, update=True)
             else:
                 self.forceUpload = False
-                # print('\r\r데이터 업로드를 건너뜁니다.\n||||||||||||', end='')
                 print('\r\r데이터 업로드를 건너뜁니다.\n', end='')
         elif not self.forceUpload:
             pass
@@ -53,7 +52,6 @@ class Database:
         orderRef.update({'date':time.get_time('start').strftime('%Y-%m-%d')})
         if update:
             orderRef.update({'updatedAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
-            # print('||||||||||||', end='')
         else:
             orderRef.update({'createdAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
         dataRef.update(dataDict)

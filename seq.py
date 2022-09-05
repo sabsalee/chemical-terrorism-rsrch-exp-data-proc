@@ -36,11 +36,15 @@ def main():
         rtdb = None
         print('\n\n[경고] 인터넷 연결 실패 - 가공된 데이터가 인터넷에 업로드되지 않습니다.')
 
+
+
+    # DIALOG
+
     while True:
         print("\n\n\n처리해야되는 폴더의 경로를 입력해주세요.")
         while True:
             try:
-                isTimeinfoFileExist, lists = filter_csv_from_dir(input("> "))
+                isTimeinfoFileExist, isMeterDataIncluded, lists = filter_csv_from_dir(input("> "))
                 break
             except FileNotFoundError:
                 print('[오류] 해당 경로가 존재하지 않습니다. 다시 시도하세요.\n')
@@ -104,7 +108,6 @@ def main():
                 except:
                     print('\n잘못 입력하신 것 같습니다.')
             
-
         try:
             print('\n\n\n[ 실험 지속시간(진행시간) 설정 ]\n')
             print(f'기본 설정되어있는 실험 지속시간(진행시간)은 [{time.get_duration()}초] 입니다.')
@@ -114,6 +117,10 @@ def main():
         except:
             pass
 
+
+
+        # PROCESS
+
         clear()
         print(f'이제 실험 데이터 가공을 시작하겠습니다. 아래의 내용을 확인해주세요.\n')
         print(f'> {order}차 실험 데이터')
@@ -121,6 +128,11 @@ def main():
         print(f'> 실험 지속시간: {time.get_duration()}초')
         input("\n>> 진행하려면 엔터키를 눌러주세요.\n\n")
 
+        # 파일 중 계측기 파일이 있다면 새로운 엑셀 파일로 정리해주기
+        # if isMeterDataIncluded:
+        #     wb_meter = Workbook()
+        #     wb_meter = meter_wb_ready(wb_meter, order)
+        #     ws_meter = wb_meter.active
 
         for i, e in enumerate(lists):
             try:
@@ -128,39 +140,50 @@ def main():
                 # print(f'[{i+1}/{len(lists)}] {e.name}')
 
                 df = preprocess_csv_to_df(e, time)
-                # print('|||', end='')
                 bar.update(20)
 
+                if e.type == 'CO2':
+                    calculated_dict = calculate_df(df)
+                    gas = 'CO2'
+                else:
+                    calculated_dict = None
+
                 wb = dataframe_to_excel(df)
-                # print('|||', end='')
                 bar.update(10)
 
                 wb = formular_process(wb)
-                # print('|||', end='')
                 bar.update(10)
 
                 if e.type != "dummy" and rtdb != None: # dummy 데이터 외(dummy는 total로만) 백업하기
                     dataDict = firebase_process(wb, e, e.type)
-                    # print('|||', end='')
                     bar.update(10)
 
                     rtdb.upload_dummy(time, order, dataDict, e.type)
-                    # print('|||', end='')
                     bar.update(20)
                 else:
-                    # print('||||||', end='')
                     bar.update(30)
 
                 wb = expression_process(wb, e)
-                # print('|||', end='')
                 bar.update(10)
 
-                chart_process(wb, e)
-                # print('|||', end='')
+                if calculated_dict != None:
+                    wb = insert_calculated_values(wb, calculated_dict)
+
+                    # if ws_meter['B2'].value == '' or ws_meter['B2'].value == None:
+                    #     st = time.get_time().strftime('%Y-%m-%s %H:%M:%S')
+                    #     ws_meter['B2'] = st
+                    #     ws_meter['B3'] = e.type
+                    #     ws_meter['B4'] = 1
+                    # else:
+                    #     ws_meter['B4'] = ws_meter['B4'].value + 1
+
+
+                chartData = chart_process(wb, e)
+                # if chartData != None:
+                #     chart_process_for_meter_wb(wb_meter, chartData)
                 bar.update(10)
 
                 wb.save(f"{e.dirPath}/{e.name[:-4]}.xlsx")
-                # print('||| OK!', end='\n\n')
                 bar.update(10)
                 bar.close()
 
@@ -170,6 +193,13 @@ def main():
                 print('\r[오류] ', end='')
                 print(err)
                 print('[오류] ' + e.name + "의 파일 변환 중 오류가 발생하여 가공하지 않고 넘어갑니다.\n")
+
+
+
+        # FINISH
+
+        # if isMeterDataIncluded:
+        #     wb_meter.save(f'{lists[0].dirPath}/{gas}계측기 데이터 모음.xlsx')
 
         print(f'\n총 {len(lists)}개의 파일 중에서 {len(lists)-errCount}개의 파일 가공에 성공하였습니다.')
         print("새로운 폴더에서 가공을 시작하시려면 'Y'를, 종료하시려면 'N'을 입력해주세요.")
@@ -183,4 +213,4 @@ def main():
             break
 
 if __name__ == '__main__':
-    pass
+    main()

@@ -1,7 +1,7 @@
 import os, csv
 import pandas as pd
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 from openpyxl import Workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.chart import LineChart, Reference
@@ -30,8 +30,10 @@ def filter_csv_from_dir(dirPath) -> list:
     # 경로안에 있는 유효한 파일들 걸러내기
     fileList = os.listdir(dirPath)
     csvList = [e for e in fileList if ".csv" in e[-4:]]
-    # 시간 정보 생성을 위해 파일 존재 확인하기
-    isTimeinfoFileExist = False
+
+    isTimeinfoFileExist = False # 시간 정보 생성을 위해 파일 존재 확인하기
+    isMeterDataIncluded = False # 계측기 종합 파일 만들기 위해 파일 존재 확인하기
+
     # 유효한 파일의 이름으로 이 데이터의 종류 결정하기
     for file in csvList:
         if "ID" in file:
@@ -44,14 +46,33 @@ def filter_csv_from_dir(dirPath) -> list:
                 isTimeinfoFileExist = True
         elif 'CO2' in file:
             processed_file_objects.append(CsvDataSheet("CO2", file, f"{dirPath}/{file}"))
+            if not isMeterDataIncluded:
+                isMeterDataIncluded = True
         elif 'He' in file:
             processed_file_objects.append(CsvDataSheet("He", file, f"{dirPath}/{file}"))
+            if not isMeterDataIncluded:
+                isMeterDataIncluded = True
+
     if isTimeinfoFileExist and ("dummy" != processed_file_objects[0].type or "total" != processed_file_objects[0].type):
         for i, csvDatasheet in enumerate(processed_file_objects):
             if "dummy" == csvDatasheet.type or "total" == csvDatasheet.type:
                 del processed_file_objects[i]
                 processed_file_objects.insert(0, csvDatasheet)
-    return [isTimeinfoFileExist, processed_file_objects]
+    return [isTimeinfoFileExist, isMeterDataIncluded, processed_file_objects]
+
+
+
+def meter_wb_ready(wb: Workbook, order: int):
+    ws = wb.active
+    ws.column_dimensions['B'].width = 24
+
+    ws['A1'] = '실험 차수'
+    ws['B1'] = order
+    ws['A2'] = '실험 시작'
+    ws['A3'] = '기체 종류'
+    ws['A4'] = '총 개수'
+
+    return wb
 
 
 
@@ -145,6 +166,42 @@ def preprocess_csv_to_df(csvDataSheet:CsvDataSheet, time:TimeInfo) -> pd.DataFra
             indexCount += 1
         df = df.iloc[startIndexNum:startIndexNum + indexCount]
         return df
+
+
+def calculate_df(df: pd.DataFrame) -> dict:
+    df = df.reset_index(drop=True)
+
+    valueArr = df['이산화탄소(ppm)']
+    prev = None
+    detected_idx = None
+    for i, v in enumerate(valueArr):
+        if prev == None:
+            prev = valueArr[0]
+            continue
+        if v >= prev + 10:
+            detected_idx = i
+            break
+        prev = v
+
+    detected_at: datetime = df.iloc[detected_idx, 0]
+    detected_period_timedelta: timedelta = detected_at - df.iloc[0, 0]
+    detected_period: int = detected_period_timedelta.seconds
+
+    max_value_index = df[df['이산화탄소(ppm)'] >= 10000].index[0]
+    max_value_reached_at: datetime = df.iloc[max_value_index, 0]
+    max_value_reached_period_timedelta: timedelta = max_value_reached_at - df.iloc[0, 0]
+    max_value_reached_period: int = max_value_reached_period_timedelta.seconds
+
+    from_detected_to_max_period_timedelta: timedelta = max_value_reached_at - detected_at
+    from_detected_to_max_period: int = from_detected_to_max_period_timedelta.seconds
+
+    return {
+        'detected_at': detected_at,
+        'detected_period': detected_period,
+        'max_value_reached_at': max_value_reached_at,
+        'max_value_reached_period': max_value_reached_period,
+        'from_detected_to_max_period': from_detected_to_max_period
+    }
 
 
 
@@ -253,114 +310,150 @@ def expression_process(wb:Workbook, csvDataSheet:CsvDataSheet):
         ws.column_dimensions["A"].width = 20
         ws.column_dimensions["C"].width = 10
         return wb
+
+
+def insert_calculated_values(wb: Workbook, cv: dict, isMeter=False, csvDataSheet:CsvDataSheet=None):
+    ws = wb.active
+    
+    if not isMeter:
+        ws['M2'] = '계측기 반응시간'
+        ws['N2'] = cv['detected_at'].strftime('%H:%M:%S')
+        ws['M3'] = '반응까지 경과시간(초)'
+        ws['N3'] = cv['detected_period']
+        ws['M4'] = '최대 ppm 도달시간'
+        ws['N4'] = cv['max_value_reached_at'].strftime('%H:%M:%S')
+        ws['M5'] = '최댓값까지 경과시간(초)'
+        ws['N5'] = cv['max_value_reached_period']
+        ws['M6'] = '반응 후 최댓값 도달시간(초)'
+        ws['N6'] = cv['from_detected_to_max_period']
+        ws.column_dimensions['M'].width = 25
+        return wb
+    else:
+        row_count = 4
+        while True:
+            if ws[f'B{row_count}'] == '' or ws[f'B{row_count}'] == None:
+                ws[f'B{row_count}'] = 'ID'
+                ws[f'B{row_count+1}'] = '계측기 반응시간'
+                ws[f'B{row_count+2}'] = '반응까지 경과시간(초)'
+                ws[f'B{row_count+3}'] = '최대 ppm 도달시간'
+                ws[f'B{row_count+4}'] = '최댓값까지 경과시간(초)'
+                ws[f'B{row_count+5}'] = '반응 후 최댓값 도달시간(초)'
+                ws[f'C{row_count}'] = csvDataSheet.name[-1]
+                ws[f'C{row_count+1}'] = cv['detected_at'].strftime('%H:%M:%S')
+                ws[f'C{row_count+2}'] = cv['detected_period']
+                ws[f'C{row_count+3}'] = cv['max_value_reached_at'].strftime('%H:%M:%S')
+                ws[f'C{row_count+4}'] = cv['max_value_reached_period']
+                ws[f'C{row_count+5}'] = cv['from_detected_to_max_period']
+                break
+            else:
+                row_count += 22
+        return wb
         
 
 def chart_process(wb:Workbook, csvDataSheet:CsvDataSheet):
-    if csvDataSheet.type == "dummy":
-        try:
-            # 차트추가
+        if csvDataSheet.type == "dummy":
+            try:
+                # 차트추가
+                ws = wb.active
+                valueOxygen = Reference(ws, min_row=1, max_row=ws.max_row, min_col=5, max_col=5)
+                valueCarbonDioxide = Reference(ws, min_row=1, max_row=ws.max_row, min_col=6, max_col=6)
+                valueHelium = Reference(ws, min_row=1, max_row=ws.max_row, min_col=7, max_col=7)
+                valueTime = Reference(ws, min_row=2, max_row=ws.max_row, min_col=3, max_col=3)
+
+                oxygenChart = LineChart()
+                oxygenChart.add_data(valueOxygen, titles_from_data=True)
+                oxygenChart.set_categories(valueTime)
+                # stylesheet
+                oxygenChart.x_axis.title = "Time(s)"
+                oxygenChart.y_axis.title = "O2(%)"
+                oxygenChart.height = 13
+                oxygenChart.width = 19
+                
+                ws.add_chart(oxygenChart, "B6")
+
+                carbonDioxideChart = LineChart()
+                carbonDioxideChart.add_data(valueCarbonDioxide, titles_from_data=True)
+                carbonDioxideChart.set_categories(valueTime)
+                # stylesheet
+                carbonDioxideChart.x_axis.title = "Time(s)"
+                carbonDioxideChart.y_axis.title = "CO2(ppm)"
+                carbonDioxideChart.height = 13
+                carbonDioxideChart.width = 19
+
+                ws.add_chart(carbonDioxideChart, "M6")
+
+                heliumChart = LineChart()
+                heliumChart.add_data(valueHelium, titles_from_data=True)
+                heliumChart.set_categories(valueTime)
+                # stylesheet
+                heliumChart.x_axis.title = "Time(s)"
+                heliumChart.y_axis.title = "He(%)"
+                heliumChart.height = 13
+                heliumChart.width = 19
+
+                ws.add_chart(heliumChart, "X6")
+            except:
+                pass
+
+        elif csvDataSheet.type == "total":
             ws = wb.active
-            valueOxygen = Reference(ws, min_row=1, max_row=ws.max_row, min_col=5, max_col=5)
-            valueCarbonDioxide = Reference(ws, min_row=1, max_row=ws.max_row, min_col=6, max_col=6)
-            valueHelium = Reference(ws, min_row=1, max_row=ws.max_row, min_col=7, max_col=7)
+            alignNum = 4 # ID칸 시작이 D열이다 (4씩 추가된다)
+
             valueTime = Reference(ws, min_row=2, max_row=ws.max_row, min_col=3, max_col=3)
 
-            oxygenChart = LineChart()
-            oxygenChart.add_data(valueOxygen, titles_from_data=True)
-            oxygenChart.set_categories(valueTime)
-            # stylesheet
-            oxygenChart.x_axis.title = "Time(s)"
-            oxygenChart.y_axis.title = "O2(%)"
-            oxygenChart.height = 13
-            oxygenChart.width = 19
-            
-            ws.add_chart(oxygenChart, "B6")
+            row = 2
+            col = 4
+            for _ in range(10):
+                valueOxygen = Reference(ws, min_row=1, max_row=ws.max_row, min_col=col + 1, max_col=col + 1)
+                valueCarbonDioxide = Reference(ws, min_row=1, max_row=ws.max_row, min_col=col + 2, max_col=col + 2)
+                valueHelium = Reference(ws, min_row=1, max_row=ws.max_row, min_col=alignNum + 3, max_col=alignNum + 3)
 
-            carbonDioxideChart = LineChart()
-            carbonDioxideChart.add_data(valueCarbonDioxide, titles_from_data=True)
-            carbonDioxideChart.set_categories(valueTime)
-            # stylesheet
-            carbonDioxideChart.x_axis.title = "Time(s)"
-            carbonDioxideChart.y_axis.title = "CO2(ppm)"
-            carbonDioxideChart.height = 13
-            carbonDioxideChart.width = 19
+                ws.column_dimensions[get_column_letter(alignNum)].width = 65
 
-            ws.add_chart(carbonDioxideChart, "M6")
+                oxygenChart = LineChart()
+                oxygenChart.add_data(valueOxygen, titles_from_data=True)
+                oxygenChart.set_categories(valueTime)
+                # stylesheet
+                oxygenChart.x_axis.title = "Time(s)"
+                oxygenChart.y_axis.title = "O2(%)"
+                oxygenChart.height = 13
+                oxygenChart.width = 19
+                
+                ws.add_chart(oxygenChart, f"{get_column_letter(alignNum)}{row}")
 
-            heliumChart = LineChart()
-            heliumChart.add_data(valueHelium, titles_from_data=True)
-            heliumChart.set_categories(valueTime)
-            # stylesheet
-            heliumChart.x_axis.title = "Time(s)"
-            heliumChart.y_axis.title = "He(%)"
-            heliumChart.height = 13
-            heliumChart.width = 19
+                carbonDioxideChart = LineChart()
+                carbonDioxideChart.add_data(valueCarbonDioxide, titles_from_data=True)
+                carbonDioxideChart.set_categories(valueTime)
+                # stylesheet
+                carbonDioxideChart.x_axis.title = "Time(s)"
+                carbonDioxideChart.y_axis.title = "CO2(ppm)"
+                carbonDioxideChart.height = 13
+                carbonDioxideChart.width = 19
 
-            ws.add_chart(heliumChart, "X6")
-        except:
-            pass
+                ws.add_chart(carbonDioxideChart, f"{get_column_letter(alignNum)}{row + 22}")
 
-    elif csvDataSheet.type == "total":
-        ws = wb.active
-        alignNum = 4 # ID칸 시작이 D열이다 (4씩 추가된다)
+                heliumChart = LineChart()
+                heliumChart.add_data(valueHelium, titles_from_data=True)
+                heliumChart.set_categories(valueTime)
+                # stylesheet
+                heliumChart.x_axis.title = "Time(s)"
+                heliumChart.y_axis.title = "He(%)"
+                heliumChart.height = 13
+                heliumChart.width = 19
 
-        valueTime = Reference(ws, min_row=2, max_row=ws.max_row, min_col=3, max_col=3)
+                ws.add_chart(heliumChart, f"{get_column_letter(alignNum)}{row + 44}")
+                
+                col += 4
+                # 5*6 배열 사용시 주석해제
+                if alignNum >= 20:
+                    alignNum = 4
+                    row += 68
+                    continue
+                alignNum += 4
+                # 5*6 여기까지
+                
 
-        row = 2
-        col = 4
-        for _ in range(10):
-            valueOxygen = Reference(ws, min_row=1, max_row=ws.max_row, min_col=col + 1, max_col=col + 1)
-            valueCarbonDioxide = Reference(ws, min_row=1, max_row=ws.max_row, min_col=col + 2, max_col=col + 2)
-            valueHelium = Reference(ws, min_row=1, max_row=ws.max_row, min_col=alignNum + 3, max_col=alignNum + 3)
-
-            ws.column_dimensions[get_column_letter(alignNum)].width = 65
-
-            oxygenChart = LineChart()
-            oxygenChart.add_data(valueOxygen, titles_from_data=True)
-            oxygenChart.set_categories(valueTime)
-            # stylesheet
-            oxygenChart.x_axis.title = "Time(s)"
-            oxygenChart.y_axis.title = "O2(%)"
-            oxygenChart.height = 13
-            oxygenChart.width = 19
-            
-            ws.add_chart(oxygenChart, f"{get_column_letter(alignNum)}{row}")
-
-            carbonDioxideChart = LineChart()
-            carbonDioxideChart.add_data(valueCarbonDioxide, titles_from_data=True)
-            carbonDioxideChart.set_categories(valueTime)
-            # stylesheet
-            carbonDioxideChart.x_axis.title = "Time(s)"
-            carbonDioxideChart.y_axis.title = "CO2(ppm)"
-            carbonDioxideChart.height = 13
-            carbonDioxideChart.width = 19
-
-            ws.add_chart(carbonDioxideChart, f"{get_column_letter(alignNum)}{row + 22}")
-
-            heliumChart = LineChart()
-            heliumChart.add_data(valueHelium, titles_from_data=True)
-            heliumChart.set_categories(valueTime)
-            # stylesheet
-            heliumChart.x_axis.title = "Time(s)"
-            heliumChart.y_axis.title = "He(%)"
-            heliumChart.height = 13
-            heliumChart.width = 19
-
-            ws.add_chart(heliumChart, f"{get_column_letter(alignNum)}{row + 44}")
-            
-            col += 4
-            # 5*6 배열 사용시 주석해제
-            if alignNum >= 20:
-                alignNum = 4
-                row += 68
-                continue
-            alignNum += 4
-            # 5*6 여기까지
-            
-
-    elif csvDataSheet.type == "CO2" or csvDataSheet.type == "He":
-        # 차트추가
-        # try:
+        elif csvDataSheet.type == "CO2" or csvDataSheet.type == "He":
             ws = wb.active
             valueCarbonDioxide = Reference(ws, min_row=1, max_row=ws.max_row, min_col=6, max_col=6)
             valueTime = Reference(ws, min_row=2, max_row=ws.max_row, min_col=3, max_col=3)
@@ -375,6 +468,18 @@ def chart_process(wb:Workbook, csvDataSheet:CsvDataSheet):
             carbonDioxideChart.width = 19
 
             ws.add_chart(carbonDioxideChart, "B6")
+            return carbonDioxideChart
+
+def chart_process_for_meter_wb(wb: Workbook, chart):
+    ws = wb.active
+    row_count = 4
+    while True:
+        if ws[f'B{row_count}'].value == '' or ws[f'B{row_count}'].value == None:
+            ws.add_chart(chart, f'D{row_count}')
+            break
+        else:
+            row_count += 22
+    # return wb
 
 
 if __name__ == "__main__":
