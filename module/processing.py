@@ -21,7 +21,7 @@ class CsvDataSheet:
 
 class TimeInfoNotMatched(Exception):
     def __str__(self) -> str:
-        return "실험시작 시간이 서로 다른 파일이 한 폴더 안에 있는 것 같습니다. 이 프로그램은 동시에 시작한 실험 파일만을 처리할 수 있습니다. 다시 시도하세요."
+        return "[오류] 실험 시작시간이 다른 파일이거나, 설정한 시간 이후에 기록된 데이터 밖에 없는 것 같습니다."
 
 
 
@@ -85,7 +85,9 @@ def preprocess_csv_to_df(csvDataSheet:CsvDataSheet, time:TimeInfo) -> pd.DataFra
             if startIndexNum == None:
                 raise TimeInfoNotMatched
             if endIndexNum == None:
-                print(f'[경고] 실험 종료 시간을 찾을 수 없습니다. {time.get_time().strftime("%H:%M")}에 시작한 후 {time.get_duration}초 후인 {time.get_end_time().strftime("%H:%M")}에 값이 없습니다. 이 파일의 마지막 시간 정보는 {df.iloc[df.shape[0], 0].strftime("%H:%M:%S")}입니다.')
+                print(f'\r[경고] 실험 종료 시간을 찾을 수 없습니다. {time.get_time().strftime("%H:%M")}에 시작한 후 {time.get_duration()}초 후인 {time.get_end_time().strftime("%H:%M")}에 값이 없습니다. 이 파일의 마지막 시간 정보는 {df.iloc[df.shape[0]-1, 0].strftime("%H:%M:%S")}입니다.  마지막 시간 정보까지만 데이터를 가공합니다.')
+                df = df.iloc[startIndexNum:]
+                return df
         except:
             raise TimeInfoNotMatched
 
@@ -127,7 +129,7 @@ def preprocess_csv_to_df(csvDataSheet:CsvDataSheet, time:TimeInfo) -> pd.DataFra
             if startIndexNum == None:
                 raise TimeInfoNotMatched
             if endIndexNum == None:
-                print(f'[경고] 실험 종료 시간을 찾을 수 없습니다. {time.get_time().strftime("%H:%M")}에 시작한 후 {time.get_duration}초 후인 {time.get_end_time().strftime("%H:%M")}에 값이 없습니다. 이 파일의 마지막 시간 정보는 {df.iloc[df.shape[0], 0].strftime("%H:%M:%S")}입니다. 마지막 시간 정보까지만 데이터를 가공합니다.')
+                print(f'\r[경고] 실험 종료 시간을 찾을 수 없습니다. {time.get_time().strftime("%H:%M")}에 시작한 후 {time.get_duration()}초 후인 {time.get_end_time().strftime("%H:%M")}에 값이 없습니다. 이 파일의 마지막 시간 정보는 {df.iloc[df.shape[0]-1, 0].strftime("%H:%M:%S")}입니다. 마지막 시간 정보까지만 데이터를 가공합니다.')
                 df = df.iloc[startIndexNum:]
                 return df
         except:
