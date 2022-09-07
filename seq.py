@@ -1,5 +1,5 @@
 from module.processing import *
-from module.firebaseupload import *
+# from module.firebaseupload import *
 import pickle, os
 import configparser
 from tqdm import tqdm
@@ -21,92 +21,102 @@ def main():
     화학테러 논문조 더미 및 계측기 데이터 가공 프로그램 ({version})
 
     - 이 프로그램을 통해 CSV파일을 엑셀파일로 가공하게 됩니다.
-    - 실험 결과 정리를 위해서 이 프로그램으로 가공된 데이터는 서버에 업로드 됩니다.
-    - 컴퓨터가 인터넷에 연결되지 않았다면 데이터는 서버에 업로드되지 못하므로 인터넷 연결을 확인해주세요.
-
 
     중요!!!: 폴더 안에 가공된 파일이 이미 있다면 덮어씌워집니다.
-    주의!! : 동시에 실험했던 데이터만 같은 폴더에 있어야 합니다. 그렇지 않으면 시간 정보가 꼬입니다.
+    주의!! : 동시에 실험했던 같은 종류의 데이터만 한 폴더에 넣으세요.
     참고   : 엑셀 내 차트 디자인은 프로그램에서 적용할 수 없습니다. 엑셀에서 직접 서식파일을 선택하세요.''')
 
-    try:
-        rtdb = Database()
-        print('\n\n[정보] 인터넷 연결 성공')
-    except:
-        rtdb = None
-        print('\n\n[경고] 인터넷 연결 실패 - 가공된 데이터가 인터넷에 업로드되지 않습니다.')
+    # try:
+    #     rtdb = Database()
+    #     print('\n\n[정보] 인터넷 연결 성공')
+    # except:
+    #     rtdb = None
+    #     print('\n\n[경고] 인터넷 연결 실패 - 가공된 데이터가 인터넷에 업로드되지 않습니다.')
 
 
 
     # DIALOG
 
     while True:
-        print("\n\n\n처리해야되는 폴더의 경로를 입력해주세요.")
+        time = TimeInfo()
+        errCount = 0
+
+        # 실험 차수 수집
+        # try:
+        #     with open('order.pkl', 'rb') as f:
+        #         order = pickle.load(f)
+        # except:
+        #     order = None
+
+        # if order != None:
+        #     try:
+        #         print('[ 실험 차수 확인 ]\n')
+        #         print(f'이전에 데이터를 가공했던 실험의 차수가 [{order}차] 입니다.')
+        #         print(f'이번에 가공할 데이터의 차수는 [{order+1}차]가 맞습니까?')
+        #         print('\n맞으면 엔터를, 아니라면 실험 차수를 숫자로 입력해주세요.')
+        #         order = int(input('> '))
+        #         try:
+        #             with open('order.pkl', 'wb') as f:
+        #                 pickle.dump(order, f)
+        #         except:
+        #             pass
+        #     except:
+        #         order += 1
+        #         try:
+        #             with open('order.pkl', 'wb') as f:
+        #                 pickle.dump(order, f)
+        #         except:
+        #             pass
+        # else:
+        #     while True:
+        #         try:
+        #             print('실험이 "몇차" 실험인지 "차수"를 "숫자"로 입력해주세요.')
+        #             order = int(input('> '))
+        #             try:
+        #                 with open('order.pkl', 'wb') as f:
+        #                     pickle.dump(order, f)
+        #             except:
+        #                 pass
+        #             break
+        #         except:
+        #             print('[오류] 숫자를 입력하셔야 합니다.')
+        
+        print('\n\n\n[ 데이터 종류 설정 ]\n')
+        print('가공할 데이터 종류를 선택해주세요.')
+        print('1. 이산화탄소 계측기')
+        print('2. 헬륨 계측기')
+        print('3. 산소 계측기')
+        print('4. 더미')
+        while True:
+            n = input('번호를 입력해주세요 > ')
+            sel = {'1':'CO2', '2':'He', '3':'O2', '4':'dummy'}
+            if n in sel:
+                file_type = sel[n]
+                break
+            print('잘못 입력하셨습니다.')
+
+        
+        print("\n\n\n[ 폴더 경로 설정 ]\n")
+        print("처리해야되는 폴더의 경로를 입력해주세요.")
         while True:
             try:
-                isTimeinfoFileExist, isMeterDataIncluded, lists = filter_csv_from_dir(input("> "))
+                lists = filter_csv_from_dir(input("> "), file_type=file_type)
                 break
             except FileNotFoundError:
                 print('[오류] 해당 경로가 존재하지 않습니다. 다시 시도하세요.\n')
             except NotADirectoryError:
                 print('[오류] 해당 경로는 폴더가 아닙니다. 다시 시도하세요.\n')
-                
-        clear()
-        time = TimeInfo()
-        errCount = 0
 
-        # 실험 차수 수집
-        try:
-            with open('order.pkl', 'rb') as f:
-                order = pickle.load(f)
-        except:
-            order = None
-
-        if order != None:
+        print("\n\n\n[ 실험 시작시간 설정 ]\n")
+        while True:
             try:
-                print('[ 실험 차수 확인 ]\n')
-                print(f'이전에 데이터를 가공했던 실험의 차수가 [{order}차] 입니다.')
-                print(f'이번에 가공할 데이터의 차수는 [{order+1}차]가 맞습니까?')
-                print('\n맞으면 엔터를, 아니라면 실험 차수를 숫자로 입력해주세요.')
-                order = int(input('> '))
-                try:
-                    with open('order.pkl', 'wb') as f:
-                        pickle.dump(order, f)
-                except:
-                    pass
+                print("실험 시작시간을 직접 입력해주세요 ( 예시[14시 8분] -> 14:8 ) > ")
+                _time = input("> ")
+                _time = list(map(int, _time.split(':')))
+                time.set_time(_time, only_time=True)
+                break
             except:
-                order += 1
-                try:
-                    with open('order.pkl', 'wb') as f:
-                        pickle.dump(order, f)
-                except:
-                    pass
-        else:
-            while True:
-                try:
-                    print('실험이 "몇차" 실험인지 "차수"를 "숫자"로 입력해주세요.')
-                    order = int(input('> '))
-                    try:
-                        with open('order.pkl', 'wb') as f:
-                            pickle.dump(order, f)
-                    except:
-                        pass
-                    break
-                except:
-                    print('[오류] 숫자를 입력하셔야 합니다.')
-
-        if isTimeinfoFileExist == False:
-            print("\n\n\n[ 실험 시작시간 설정 ]\n")
-            print("현재 선택한 폴더 내에 실험 시작시간 정보를 가진 파일이 없는 것 같습니다.")
-            while True:
-                try:
-                    print("\n실험 시작시간을 직접 입력해주세요 ( 예시[14시 8분] -> 14:8 )")
-                    _time = input("> ")
-                    _time = list(map(int, _time.split(':')))
-                    time.set_time(_time, only_time=True)
-                    break
-                except:
-                    print('\n잘못 입력하신 것 같습니다.')
+                print('\n잘못 입력하신 것 같습니다.')
             
         try:
             print('\n\n\n[ 실험 지속시간(진행시간) 설정 ]\n')
@@ -123,28 +133,22 @@ def main():
 
         clear()
         print(f'이제 실험 데이터 가공을 시작하겠습니다. 아래의 내용을 확인해주세요.\n')
-        print(f'> {order}차 실험 데이터')
-        print(f'> {"실험 시작시간: 파일에서 추출 예정" if isTimeinfoFileExist else f"실험 시작시간: {time.timedatalist[0]}시 {time.timedatalist[1]}분"}')
+        # print(f'> {order}차 실험 데이터')
+        print(f'> 데이터 종류: {file_type}')
+        print(f'> 실험 시작시간: {time.timedatalist[0]}시 {time.timedatalist[1]}분')
         print(f'> 실험 지속시간: {time.get_duration()}초')
         input("\n>> 진행하려면 엔터키를 눌러주세요.\n\n")
-
-        # 파일 중 계측기 파일이 있다면 새로운 엑셀 파일로 정리해주기
-        # if isMeterDataIncluded:
-        #     wb_meter = Workbook()
-        #     wb_meter = meter_wb_ready(wb_meter, order)
-        #     ws_meter = wb_meter.active
 
         for i, e in enumerate(lists):
             try:
                 bar = tqdm(total = 100, desc=f'[{i+1}/{len(lists)}] {e.name}', bar_format='{desc:30.28}{percentage:3.0f}%|{bar:30}|', smoothing=1)
-                # print(f'[{i+1}/{len(lists)}] {e.name}')
 
                 df = preprocess_csv_to_df(e, time)
                 bar.update(20)
 
-                if e.type == 'CO2':
+                # 그래프 분석을 위한 데이터 생성
+                if e.type == 'CO2': #TODO: 계측기 데이터 늘어나면 맞게 수정한다.
                     calculated_dict = calculate_df(df)
-                    gas = 'CO2'
                 else:
                     calculated_dict = None
 
@@ -154,14 +158,15 @@ def main():
                 wb = formular_process(wb)
                 bar.update(10)
 
-                if e.type != "dummy" and rtdb != None: # dummy 데이터 외(dummy는 total로만) 백업하기
-                    dataDict = firebase_process(wb, e, e.type)
-                    bar.update(10)
+                # if e.type != "dummy" and rtdb != None: # dummy 데이터 외(dummy는 total로만) 백업하기
+                #     dataDict = firebase_process(wb, e, e.type)
+                #     bar.update(10)
 
-                    rtdb.upload_dummy(time, order, dataDict, e.type)
-                    bar.update(20)
-                else:
-                    bar.update(30)
+                #     rtdb.upload_dummy(time, order, dataDict, e.type)
+                #     bar.update(20)
+                # else:
+                #     bar.update(30)
+                bar.update(30)
 
                 wb = expression_process(wb, e)
                 bar.update(10)
@@ -169,21 +174,10 @@ def main():
                 if calculated_dict != None:
                     wb = insert_calculated_values(wb, calculated_dict)
 
-                    # if ws_meter['B2'].value == '' or ws_meter['B2'].value == None:
-                    #     st = time.get_time().strftime('%Y-%m-%s %H:%M:%S')
-                    #     ws_meter['B2'] = st
-                    #     ws_meter['B3'] = e.type
-                    #     ws_meter['B4'] = 1
-                    # else:
-                    #     ws_meter['B4'] = ws_meter['B4'].value + 1
-
-
-                chartData = chart_process(wb, e)
-                # if chartData != None:
-                #     chart_process_for_meter_wb(wb_meter, chartData)
+                chart_process(wb, e)
                 bar.update(10)
 
-                wb.save(f"{e.dirPath}/{e.name[:-4]}.xlsx")
+                wb.save(f"{e.dirPath}/{e.name[:-4]} 정리.xlsx")
                 bar.update(10)
                 bar.close()
 
@@ -197,9 +191,6 @@ def main():
 
 
         # FINISH
-
-        # if isMeterDataIncluded:
-        #     wb_meter.save(f'{lists[0].dirPath}/{gas}계측기 데이터 모음.xlsx')
 
         print(f'\n총 {len(lists)}개의 파일 중에서 {len(lists)-errCount}개의 파일 가공에 성공하였습니다.')
         print("새로운 폴더에서 가공을 시작하시려면 'Y'를, 종료하시려면 'N'을 입력해주세요.")

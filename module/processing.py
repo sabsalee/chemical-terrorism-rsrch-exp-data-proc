@@ -25,54 +25,30 @@ class TimeInfoNotMatched(Exception):
 
 
 
-def filter_csv_from_dir(dirPath) -> list:
+def filter_csv_from_dir(dirPath, file_type) -> list:
     processed_file_objects = []
+
     # 경로안에 있는 유효한 파일들 걸러내기
     fileList = os.listdir(dirPath)
     csvList = [e for e in fileList if ".csv" in e[-4:]]
 
-    isTimeinfoFileExist = False # 시간 정보 생성을 위해 파일 존재 확인하기
-    isMeterDataIncluded = False # 계측기 종합 파일 만들기 위해 파일 존재 확인하기
-
-    # 유효한 파일의 이름으로 이 데이터의 종류 결정하기
+    # 유효한 파일의 이름 또는 선택한 선택지로 이 데이터의 종류 결정하기
     for file in csvList:
         if "ID" in file:
             processed_file_objects.append(CsvDataSheet("dummy", file, f"{dirPath}/{file}"))
-            if not isTimeinfoFileExist:
-                isTimeinfoFileExist = True
         elif "Total" in file:
             processed_file_objects.append(CsvDataSheet("total", file, f"{dirPath}/{file}"))
-            if not isTimeinfoFileExist:
-                isTimeinfoFileExist = True
         elif 'CO2' in file:
             processed_file_objects.append(CsvDataSheet("CO2", file, f"{dirPath}/{file}"))
-            if not isMeterDataIncluded:
-                isMeterDataIncluded = True
+            continue # 혹시 O2까지 내려갈까봐 적어둠
         elif 'He' in file:
             processed_file_objects.append(CsvDataSheet("He", file, f"{dirPath}/{file}"))
-            if not isMeterDataIncluded:
-                isMeterDataIncluded = True
+        elif 'O2' in file:
+            processed_file_objects.append(CsvDataSheet("O2", file, f"{dirPath}/{file}"))
+        else:
+            processed_file_objects.append(CsvDataSheet(file_type, file, f"{dirPath}/{file}")) # 나머지는 본래 입력한 파일 속성으로 할당
 
-    if isTimeinfoFileExist and ("dummy" != processed_file_objects[0].type or "total" != processed_file_objects[0].type):
-        for i, csvDatasheet in enumerate(processed_file_objects):
-            if "dummy" == csvDatasheet.type or "total" == csvDatasheet.type:
-                del processed_file_objects[i]
-                processed_file_objects.insert(0, csvDatasheet)
-    return [isTimeinfoFileExist, isMeterDataIncluded, processed_file_objects]
-
-
-
-def meter_wb_ready(wb: Workbook, order: int):
-    ws = wb.active
-    ws.column_dimensions['B'].width = 24
-
-    ws['A1'] = '실험 차수'
-    ws['B1'] = order
-    ws['A2'] = '실험 시작'
-    ws['A3'] = '기체 종류'
-    ws['A4'] = '총 개수'
-
-    return wb
+    return processed_file_objects
 
 
 
@@ -80,21 +56,40 @@ def preprocess_csv_to_df(csvDataSheet:CsvDataSheet, time:TimeInfo) -> pd.DataFra
     if csvDataSheet.type == "dummy":
         df = pd.read_csv(csvDataSheet.path, encoding="CP949")
         df = df.drop([df.columns[5], df.columns[6], df.columns[7]], axis='columns') # 온도, 습도, 대기압 삭제
-        df[df.columns[0]] = pd.to_datetime(df[df.columns[0]], format="%Y-%m-%d-%H-%M-%S") # 측정시간 Datetime으로 변환
 
         # 시작 시간 추출
         if time.isExist() == False:
-            time.set_time(df.iloc[0,0])
-        
+            dateInCell = list(map(int, (df.iloc[1,0].split("-"))))
+            time.set_time(datetime(dateInCell[0], dateInCell[1], dateInCell[2], time.timedatalist[0], time.timedatalist[1], 0))
 
-        indexCount = 0 # 범위에 포함되는 인덱스 잘라내기 위한 변수
-        for i in range(df.shape[0]):
-            diff = df.iloc[i,0] - df.iloc[0,0]
-            if diff.seconds > time.get_duration():
-                break
-            indexCount += 1
-        df = df.iloc[:indexCount]
-        # df[df.columns[0]] = df[df.columns[0]].dt.strftime("%I:%M:%S %p")
+        # 측정시간 Datetime으로 변환
+        df[df.columns[0]] = pd.to_datetime(df[df.columns[0]], format="%Y-%m-%d-%H-%M-%S")
+        
+        try:
+            # CASE1 시작은 -1초씩 하면서 발견한 값을 시작 0초로 만들고, 끝은 +1초씩 하면서 발견한 값을 끝 0초로 만든다.
+            startIndexNum, endIndexNum = [None, None]
+            for s in range(11): # 약 10초 범위로 진행
+                startIndex = df[df["측정시간"] == time.get_time() - timedelta(seconds=s)] # 시작시간 인덱스 가져오기
+                if len(startIndex) > 0:
+                    startIndexNum = startIndex.index[0]
+                    if s > 0:
+                        df.iloc[startIndexNum, df.columns.get_loc('측정시간')] = time.get_time()
+                    break
+            for s in range(11): # 약 10초 범위로 진행
+                endIndex = df[df["측정시간"] == time.get_end_time() + timedelta(seconds=s)] # 시작시간 인덱스 가져오기
+                if len(endIndex) > 0:
+                    endIndexNum = endIndex.index[0]
+                    if s > 0:
+                        df.iloc[endIndexNum, df.columns.get_loc('측정시간')] = time.get_end_time()
+                    break
+            if startIndexNum == None:
+                raise TimeInfoNotMatched
+            if endIndexNum == None:
+                print(f'[경고] 실험 종료 시간을 찾을 수 없습니다. {time.get_time().strftime("%H:%M")}에 시작한 후 {time.get_duration}초 후인 {time.get_end_time().strftime("%H:%M")}에 값이 없습니다. 이 파일의 마지막 시간 정보는 {df.iloc[df.shape[0], 0].strftime("%H:%M:%S")}입니다.')
+        except:
+            raise TimeInfoNotMatched
+
+        df = df.iloc[startIndexNum:endIndexNum+1]
         return df
 
     elif csvDataSheet.type == "total":
@@ -103,22 +98,45 @@ def preprocess_csv_to_df(csvDataSheet:CsvDataSheet, time:TimeInfo) -> pd.DataFra
         for i in [5,6,7, 12,13,14, 19,20,21, 26,27,28, 33,34,35, 40,41,42, 47,48,49, 54,55,56, 61,62,63, 68,69,70]:
             dropArray.append(df.columns[i])
         df = df.drop(dropArray, axis='columns') # 온도, 습도, 대기압 전체 삭제
-        df[df.columns[0]] = pd.to_datetime(df[df.columns[0]], format="%Y-%m-%d-%H-%M-%S") # 측정시간 Datetime으로 변환
-
+        
         # 시작 시간 추출
         if time.isExist() == False:
-            time.set_time(df.iloc[0,0])
+            dateInCell = list(map(int, (df.iloc[1,0].split("-"))))
+            time.set_time(datetime(dateInCell[0], dateInCell[1], dateInCell[2], time.timedatalist[0], time.timedatalist[1], 0))
 
-        indexCount = 0 # 범위에 포함되는 인덱스 잘라내기 위한 변수
-        for i in range(df.shape[0]):
-            diff = df.iloc[i,0] - df.iloc[0,0]
-            if diff.seconds > time.get_duration():
-                break
-            indexCount += 1
-        df = df.iloc[:indexCount]
+        # 측정시간 Datetime으로 변환
+        df[df.columns[0]] = pd.to_datetime(df[df.columns[0]], format="%Y-%m-%d-%H-%M-%S")
+        
+        try:
+            # CASE1 시작은 -1초씩 하면서 발견한 값을 시작 0초로 만들고, 끝은 +1초씩 하면서 발견한 값을 끝 0초로 만든다.
+            startIndexNum, endIndexNum = [None, None]
+            for s in range(11): # 약 10초 범위로 진행
+                startIndex = df[df["측정시간"] == time.get_time() - timedelta(seconds=s)] # 시작시간 인덱스 가져오기
+                if len(startIndex) > 0:
+                    startIndexNum = startIndex.index[0]
+                    if s > 0:
+                        df.iloc[startIndexNum, df.columns.get_loc('측정시간')] = time.get_time()
+                    break
+            for s in range(11): # 약 10초 범위로 진행
+                endIndex = df[df["측정시간"] == time.get_end_time() + timedelta(seconds=s)] # 시작시간 인덱스 가져오기
+                if len(endIndex) > 0:
+                    endIndexNum = endIndex.index[0]
+                    if s > 0:
+                        df.iloc[endIndexNum, df.columns.get_loc('측정시간')] = time.get_end_time()
+                    break
+            if startIndexNum == None:
+                raise TimeInfoNotMatched
+            if endIndexNum == None:
+                print(f'[경고] 실험 종료 시간을 찾을 수 없습니다. {time.get_time().strftime("%H:%M")}에 시작한 후 {time.get_duration}초 후인 {time.get_end_time().strftime("%H:%M")}에 값이 없습니다. 이 파일의 마지막 시간 정보는 {df.iloc[df.shape[0], 0].strftime("%H:%M:%S")}입니다. 마지막 시간 정보까지만 데이터를 가공합니다.')
+                df = df.iloc[startIndexNum:]
+                return df
+        except:
+            raise TimeInfoNotMatched
+        df = df.iloc[startIndexNum:endIndexNum+1]
         return df
 
-    elif csvDataSheet.type == "CO2" or csvDataSheet.type == "He":
+
+    elif csvDataSheet.type == "CO2" or csvDataSheet.type == "He" or csvDataSheet.type == "O2":
         # csv 전처리 후 numpy Array로 변환하여 DataFrame 생성
         rows = []
         col = {"exist": False, "array": []}
@@ -140,8 +158,10 @@ def preprocess_csv_to_df(csvDataSheet:CsvDataSheet, time:TimeInfo) -> pd.DataFra
         ar = np.array(rows)
         df = pd.DataFrame(ar, columns=col["array"])
         df = df.astype({"Temp.":float, "Humidity":float})
-        df = df.astype({'CO2':float} if csvDataSheet.type == 'CO2' else {'He':float})
-        df.rename(columns={'CO2':'이산화탄소(ppm)'} if csvDataSheet.type == 'CO2' else {'He':'헬륨(%)'}, inplace=True)
+        df = df.astype({csvDataSheet.type:float})
+        # 22.09.06 수정요청에 의해서 아래 내용 주석처리 # FIXME: 여기서 처리하고 아래에서 다시 바꾼다던지 할까?
+        # type_kor_name = {'CO2':'이산화탄소(ppm)', 'He':'헬륨(%)', 'O2':'산소(%)'}
+        # df.rename(columns={csvDataSheet.type:type_kor_name[csvDataSheet.type]})
 
         # 시작 시간 추출
         if time.isExist() == False:
@@ -151,8 +171,9 @@ def preprocess_csv_to_df(csvDataSheet:CsvDataSheet, time:TimeInfo) -> pd.DataFra
         df = df.drop([df.columns[0]], axis='columns') # 인덱스 삭제
         df[df.columns[0]] = pd.to_datetime(df[df.columns[0]], format="%m-%d-%Y %H:%M:%S") # 측정시간 Datetime으로 변환
         
+        # 시작시간 인덱스 가져오기
         try:
-            startIndexNum = df[df["TIME"] == time.get_time()].index[0] # 시작시간 인덱스 가져오기
+            startIndexNum = df[df["TIME"] == time.get_time()].index[0] 
         except:
             raise TimeInfoNotMatched
 
@@ -171,7 +192,7 @@ def preprocess_csv_to_df(csvDataSheet:CsvDataSheet, time:TimeInfo) -> pd.DataFra
 def calculate_df(df: pd.DataFrame) -> dict:
     df = df.reset_index(drop=True)
 
-    valueArr = df['이산화탄소(ppm)']
+    valueArr = df['CO2']
     prev = None
     detected_idx = None
     for i, v in enumerate(valueArr):
@@ -187,7 +208,7 @@ def calculate_df(df: pd.DataFrame) -> dict:
     detected_period_timedelta: timedelta = detected_at - df.iloc[0, 0]
     detected_period: int = detected_period_timedelta.seconds
 
-    max_value_index = df[df['이산화탄소(ppm)'] >= 10000].index[0]
+    max_value_index = df[df['CO2'] >= 10000].index[0]
     max_value_reached_at: datetime = df.iloc[max_value_index, 0]
     max_value_reached_period_timedelta: timedelta = max_value_reached_at - df.iloc[0, 0]
     max_value_reached_period: int = max_value_reached_period_timedelta.seconds
@@ -230,6 +251,8 @@ def formular_process(wb:Workbook):
     except:
         pass
 
+# FIXME: 여기까지 일단 분석함
+
 def firebase_process(wb: Workbook, csvDataSheet: CsvDataSheet, __type: str) -> dict:
     dataDict = {}
     ws = wb.active
@@ -261,15 +284,16 @@ def firebase_process(wb: Workbook, csvDataSheet: CsvDataSheet, __type: str) -> d
                 dataDict[f'DUMMY_ID{id+1}'][i] = [row[0],row[2],row[4 + 4*id],row[5 + 4*id],row[6 + 4*id]]
         return dataDict
 
-    elif __type == 'CO2' or __type == 'He':
-        all = ws.iter_rows(min_row=0, max_row=ws.max_row, min_col=0, max_col=ws.max_column, values_only=True)
-        __si = csvDataSheet.name.rfind('_') + 1
-        __ei = csvDataSheet.name.find('.csv')
-        dataDict[f'{__type}_{csvDataSheet.name[__si:__ei]}'] = {}
-        for i, row in enumerate(all):
-            # 0 - 날짜, 2 - 경과시간, 5 - 타겟가스
-            dataDict[f'{__type}_{csvDataSheet.name[__si:__ei]}'][i] = [row[0],row[2],row[5]]
-        return dataDict
+    # elif __type == 'CO2': #TODO: 추후 데이터시트를 보고 추가
+    # elif __type == 'CO2' or __type == 'He':
+        # all = ws.iter_rows(min_row=0, max_row=ws.max_row, min_col=0, max_col=ws.max_column, values_only=True)
+        # __si = csvDataSheet.name.rfind('_') + 1 # FIXME: 사용불가능, 이름에 규칙이 없기 때문
+        # __ei = csvDataSheet.name.find('.csv')
+        # dataDict[f'{__type}_{csvDataSheet.name[__si:__ei]}'] = {}
+        # for i, row in enumerate(all):
+        #     # 0 - 날짜, 2 - 경과시간, 5 - 타겟가스
+        #     dataDict[f'{__type}_{csvDataSheet.name[__si:__ei]}'][i] = [row[0],row[2],row[5]]
+        # return dataDict
 
 
 
@@ -453,22 +477,23 @@ def chart_process(wb:Workbook, csvDataSheet:CsvDataSheet):
                 # 5*6 여기까지
                 
 
-        elif csvDataSheet.type == "CO2" or csvDataSheet.type == "He":
+        elif csvDataSheet.type == "CO2" or csvDataSheet.type == "He" or csvDataSheet.type == "O2":
             ws = wb.active
-            valueCarbonDioxide = Reference(ws, min_row=1, max_row=ws.max_row, min_col=6, max_col=6)
+            value = Reference(ws, min_row=1, max_row=ws.max_row, min_col=6, max_col=6)
             valueTime = Reference(ws, min_row=2, max_row=ws.max_row, min_col=3, max_col=3)
 
-            carbonDioxideChart = LineChart()
-            carbonDioxideChart.add_data(valueCarbonDioxide, titles_from_data=True)
-            carbonDioxideChart.set_categories(valueTime)
+            chart = LineChart()
+            chart.add_data(value, titles_from_data=True)
+            chart.set_categories(valueTime)
             # stylesheet
-            carbonDioxideChart.x_axis.title = "Time(s)"
-            carbonDioxideChart.y_axis.title = '이산화탄소(ppm)' if csvDataSheet.type == 'CO2' else '헬륨(%)'
-            carbonDioxideChart.height = 13
-            carbonDioxideChart.width = 19
+            type_kor_name = {'CO2':'이산화탄소(ppm)', 'He':'헬륨(%)', 'O2':'산소(%)'}
+            chart.title = type_kor_name[csvDataSheet.type]
+            chart.x_axis.title = "Time(s)"
+            # chart.y_axis.title = '이산화탄소(ppm)' if csvDataSheet.type == 'CO2' else '헬륨(%)'
+            chart.height = 13
+            chart.width = 19
+            ws.add_chart(chart, "B6")
 
-            ws.add_chart(carbonDioxideChart, "B6")
-            return carbonDioxideChart
 
 def chart_process_for_meter_wb(wb: Workbook, chart):
     ws = wb.active

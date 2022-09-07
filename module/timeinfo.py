@@ -4,6 +4,7 @@ class TimeInfo:
     def __init__(self, duration=600) -> None:
         self.__exist = False
         self.__starttime = None
+        self.__endtime = None
         self.__duration = duration
         self.timedatalist = None
 
@@ -16,6 +17,7 @@ class TimeInfo:
                 time = time.replace(second=0)
 
             self.__starttime = time
+            self.__endtime = time + timedelta(seconds=self.get_duration())
             self.__exist = True
         else:
             self.timedatalist = time
@@ -24,6 +26,9 @@ class TimeInfo:
     
     def get_time(self) -> datetime:
         return self.__starttime
+
+    def get_end_time(self) -> datetime:
+        return self.__endtime
 
     
     def set_duration(self, du:int) -> None:

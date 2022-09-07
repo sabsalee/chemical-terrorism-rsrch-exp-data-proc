@@ -68,7 +68,8 @@ def main():
             conf['DEFAULT']['version'] = version_from_local
 
         # Get latest version from github releases
-        print('[업데이트] 인터넷에서 최신 버전의 업데이트 확인 중...')
+        print('프로그램 준비 중...')
+        # print('[업데이트] 인터넷에서 최신 버전의 업데이트 확인 중...')
         response = requests.get("https://api.github.com/repos/sabsalee/chemical-terrorism-rsrch-exp-data-proc/releases/latest")
         version_from_releases = response.json()['tag_name']
         zipLink = response.json()['zipball_url']
@@ -96,13 +97,14 @@ def main():
                 with open('version.ini', 'w', encoding='utf-8') as cf:
                     conf.write(cf)
                 print('\n[업데이트] 업데이트 완료!')
-                print('10초 뒤 이동합니다.')
-                time.sleep(10)
+                # print('10초 뒤 이동합니다.')
+                return True
             else:
                 conf['DEFAULT']['lastUpdateCheck'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                print('\n[업데이트] 최신 버전의 프로그램을 사용 중입니다.')
-                print('5초 뒤 이동합니다.')
-                time.sleep(5)
+                # print('\n[업데이트] 최신 버전의 프로그램을 사용 중입니다.')
+                # print('5초 뒤 이동합니다.')
+                # time.sleep(5)
+                return False
         except:
             print('[업데이트] 업데이트 진행 중 오류 발생')
             isErrorRaised = True
@@ -111,8 +113,9 @@ def main():
         isErrorRaised = True
     finally:
         if isErrorRaised:
-            print('5초 뒤 이동합니다.')
-            time.sleep(5)
+            # print('5초 뒤 이동합니다.')
+            # time.sleep(5)
+            return False
 
 if __name__ == '__main__':
     pass
