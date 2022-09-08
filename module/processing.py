@@ -85,7 +85,7 @@ def preprocess_csv_to_df(csvDataSheet:CsvDataSheet, time:TimeInfo) -> pd.DataFra
             if startIndexNum == None:
                 raise TimeInfoNotMatched
             if endIndexNum == None:
-                print(f'\r[경고] 실험 종료 시간을 찾을 수 없습니다. {time.get_time().strftime("%H:%M")}에 시작한 후 {time.get_duration()}초 후인 {time.get_end_time().strftime("%H:%M")}에 값이 없습니다. 이 파일의 마지막 시간 정보는 {df.iloc[df.shape[0]-1, 0].strftime("%H:%M:%S")}입니다.  마지막 시간 정보까지만 데이터를 가공합니다.')
+                print(f'\r[경고] {csvDataSheet.name}의 실험 종료 시간을 찾을 수 없습니다. {time.get_time().strftime("%H:%M")}에 시작한 후 {time.get_duration()}초 후인 {time.get_end_time().strftime("%H:%M")}에 값이 없습니다. 이 파일의 마지막 시간 정보는 {df.iloc[df.shape[0]-1, 0].strftime("%H:%M:%S")}입니다.  마지막 시간 정보까지만 데이터를 가공합니다.')
                 df = df.iloc[startIndexNum:]
                 return df
         except:
@@ -191,13 +191,16 @@ def preprocess_csv_to_df(csvDataSheet:CsvDataSheet, time:TimeInfo) -> pd.DataFra
         return df
 
 
-def calculate_df(df: pd.DataFrame) -> dict:
+def calculate_df(df: pd.DataFrame, stab_period:int) -> dict:
     df = df.reset_index(drop=True)
 
-    valueArr = df['CO2']
+    valueArr = df['CO2'] # TODO: 후에 새로운 계측기 나온다면 추가
     prev = None
     detected_idx = None
     for i, v in enumerate(valueArr):
+        if stab_period > 0:
+            stab_period -= 1
+            continue
         if prev == None:
             prev = valueArr[0]
             continue

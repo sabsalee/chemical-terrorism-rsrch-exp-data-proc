@@ -110,14 +110,25 @@ def main():
         print("\n\n\n[ 실험 시작시간 설정 ]\n")
         while True:
             try:
-                print("실험 시작시간을 직접 입력해주세요 ( 예시[14시 8분] -> 14:8 ) > ")
+                print("실험 시작시간을 직접 입력해주세요 ( 예시[14시 8분] -> 14:8 )")
                 _time = input("> ")
                 _time = list(map(int, _time.split(':')))
                 time.set_time(_time, only_time=True)
                 break
             except:
                 print('\n잘못 입력하신 것 같습니다.')
-            
+
+        print("\n\n\n[ 안정화 시간 설정 ]\n")
+        while True:
+            try:
+                print('실험 시작 후 반응시간을 계산하기 위해서 안정화 시간을 입력해야합니다.')
+                print('실험 안정화 시간을 초로 입력해주세요.')
+                __stabililze_period = int(input('>' ))
+                time.set_stab_period(__stabililze_period)
+                break
+            except:
+                print('\n잘못 입력하셨습니다.')
+        
         try:
             print('\n\n\n[ 실험 지속시간(진행시간) 설정 ]\n')
             print(f'기본 설정되어있는 실험 지속시간(진행시간)은 [{time.get_duration()}초] 입니다.')
@@ -148,7 +159,7 @@ def main():
 
                 # 그래프 분석을 위한 데이터 생성
                 if e.type == 'CO2': #TODO: 계측기 데이터 늘어나면 맞게 수정한다.
-                    calculated_dict = calculate_df(df)
+                    calculated_dict = calculate_df(df, time.get_stab_period())
                 else:
                     calculated_dict = None
 
