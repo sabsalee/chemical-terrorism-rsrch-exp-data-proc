@@ -118,16 +118,18 @@ def main():
             except:
                 print('\n잘못 입력하신 것 같습니다.')
 
-        print("\n\n\n[ 안정화 시간 설정 ]\n")
-        while True:
-            try:
-                print('실험 시작 후 반응시간을 계산하기 위해서 안정화 시간을 입력해야합니다.')
-                print('실험 안정화 시간을 초로 입력해주세요.')
-                __stabililze_period = int(input('>' ))
-                time.set_stab_period(__stabililze_period)
-                break
-            except:
-                print('\n잘못 입력하셨습니다.')
+        # print("\n\n\n[ 안정화 시간 설정 ]\n")
+        # while True:
+        #     try:
+        #         print('실험 시작 후 반응시간을 계산하기 위해서 안정화 시간을 입력해야합니다.')
+        #         print('실험 안정화 시간을 초로 입력해주세요.')
+        #         __stabililze_period = int(input('>' ))
+        #         time.set_stab_period(__stabililze_period)
+        #         break
+        #     except:
+        #         print('\n잘못 입력하셨습니다.')
+        # 임시로 0초 설정
+        time.set_stab_period(0)
         
         try:
             print('\n\n\n[ 실험 지속시간(진행시간) 설정 ]\n')
