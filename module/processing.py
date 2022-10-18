@@ -30,7 +30,7 @@ def filter_csv_from_dir(dirPath, file_type) -> list:
 
     # 경로안에 있는 유효한 파일들 걸러내기
     fileList = os.listdir(dirPath)
-    csvList = [e for e in fileList if ".csv" in e[-4:]]
+    csvList = [e for e in fileList if ".csv" in e[-4:] or ".xls" in e[-4:] or ".XLS" in e[-4:]]
 
     # 유효한 파일의 이름 또는 선택한 선택지로 이 데이터의 종류 결정하기
     for file in csvList:
@@ -52,7 +52,7 @@ def filter_csv_from_dir(dirPath, file_type) -> list:
 
 
 
-def preprocess_csv_to_df(csvDataSheet:CsvDataSheet, time:TimeInfo) -> pd.DataFrame: # CSV파일 가공하는 함수
+def preprocess_to_df(csvDataSheet:CsvDataSheet, time:TimeInfo) -> pd.DataFrame: # CSV파일 가공하는 함수
     if csvDataSheet.type == "dummy":
         df = pd.read_csv(csvDataSheet.path, encoding="CP949")
         df = df.drop([df.columns[5], df.columns[6], df.columns[7]], axis='columns') # 온도, 습도, 대기압 삭제
@@ -138,7 +138,7 @@ def preprocess_csv_to_df(csvDataSheet:CsvDataSheet, time:TimeInfo) -> pd.DataFra
         return df
 
 
-    elif csvDataSheet.type == "CO2" or csvDataSheet.type == "He" or csvDataSheet.type == "O2":
+    elif csvDataSheet.type == "CO2" or csvDataSheet.type == "He":
         # csv 전처리 후 numpy Array로 변환하여 DataFrame 생성
         rows = []
         col = {"exist": False, "array": []}
@@ -189,6 +189,66 @@ def preprocess_csv_to_df(csvDataSheet:CsvDataSheet, time:TimeInfo) -> pd.DataFra
             indexCount += 1
         df = df.iloc[startIndexNum:startIndexNum + indexCount]
         return df
+    elif csvDataSheet.type == "O2":
+        fileData = []
+        with open(csvDataSheet.path, 'r') as f:
+            for line in f:
+                tmp: list = line.strip().split("\t")
+
+                while tmp.count('          '):
+                    tmp.remove('          ')
+                
+                fileData.append(tmp)
+            
+            for el in ['Ch1_RH','RH_Unit','Ch2_rhT','rhT_unit','Ch3_DEW','dew_unit','Ch4_wet','wet_unit']:
+                try:
+                    fileData[0].remove(el)
+                except:
+                    print('열 제거 작업 중 오류 발생')
+                    raise Exception
+
+        df = pd.DataFrame(fileData[1:], columns=fileData[0])
+
+        # 시작 시간 추출
+        if time.isExist() == False:
+            dateInCell = list(map(int, (df.iloc[1,1].split("/"))))
+            time.set_time(datetime(dateInCell[0], dateInCell[1], dateInCell[2], time.timedatalist[0], time.timedatalist[1], 0))
+
+        df[df.columns[2]] = pd.to_datetime(df['Date'] + ' ' + df['Time'])
+        df.drop(['Position', 'Date', 'O2_unit', 'Ch6_O2T', 'O2T_unit'], axis=1, inplace=True)
+        df = df.astype({'Ch5_O2':'float'})
+
+
+
+        try:
+            # CASE1 시작은 -1초씩 하면서 발견한 값을 시작 0초로 만들고, 끝은 +1초씩 하면서 발견한 값을 끝 0초로 만든다.
+            startIndexNum, endIndexNum = [None, None]
+            for s in range(11): # 약 10초 범위로 진행
+                startIndex = df[df["Time"] == time.get_time() - timedelta(seconds=s)] # 시작시간 인덱스 가져오기
+                if len(startIndex) > 0:
+                    startIndexNum = startIndex.index[0]
+                    if s > 0:
+                        df.iloc[startIndexNum, df.columns.get_loc('Time')] = time.get_time()
+                    break
+            for s in range(11): # 약 10초 범위로 진행
+                endIndex = df[df["Time"] == time.get_end_time() + timedelta(seconds=s)] # 시작시간 인덱스 가져오기
+                if len(endIndex) > 0:
+                    endIndexNum = endIndex.index[0]
+                    if s > 0:
+                        df.iloc[endIndexNum, df.columns.get_loc('Time')] = time.get_end_time()
+                    break
+            if startIndexNum == None:
+                raise TimeInfoNotMatched
+            if endIndexNum == None:
+                print(f'\r[경고] 실험 종료 시간을 찾을 수 없습니다. {time.get_time().strftime("%H:%M")}에 시작한 후 {time.get_duration()}초 후인 {time.get_end_time().strftime("%H:%M")}에 값이 없습니다. 이 파일의 마지막 시간 정보는 {df.iloc[df.shape[0]-1, 0].strftime("%H:%M:%S")}입니다. 마지막 시간 정보까지만 데이터를 가공합니다.')
+                df = df.iloc[startIndexNum:]
+                return df
+        except:
+            raise TimeInfoNotMatched
+        df = df.iloc[startIndexNum:endIndexNum+1]
+        return df
+
+
 
 
 def calculate_df(df: pd.DataFrame, stab_period:int) -> dict:
@@ -244,7 +304,19 @@ def dataframe_to_excel(dataframe:pd.DataFrame):
 
 
 
-def formular_process(wb:Workbook):
+def formular_process(wb:Workbook, t:str):
+    # if t == 'O2':
+    #     try:
+    #         # 열추가, 수식추가
+    #         ws = wb.active
+    #         ws.insert_cols(1, 2)
+    #         ws["B1"] = "경과시간(s)"
+    #         for i in range(2, ws.max_row + 1):
+    #             ws[f"B{i}"] = f"=ROUND((A{i}-$A$2)*24*60*60,0)"
+    #         return wb
+    #     except:
+    #         pass
+    # else:
     try:
         # 열추가, 수식추가
         ws = wb.active
@@ -332,13 +404,21 @@ def expression_process(wb:Workbook, csvDataSheet:CsvDataSheet):
             alignNum += 4
         return wb
     
-    elif csvDataSheet.type == "CO2" or csvDataSheet.type == "He":
+    elif csvDataSheet.type == "CO2" or csvDataSheet.type == "He" or csvDataSheet.type == "O2":
         dateStyle = NamedStyle(name="datetime", number_format="[$-x-systime]h:mm:ss AM/PM")
         for i in range(2, ws.max_row + 1):
             ws[f"A{i}"].style = dateStyle
         ws.column_dimensions["A"].width = 20
         ws.column_dimensions["C"].width = 10
         return wb
+
+    # elif csvDataSheet.type == "O2":
+    #     dateStyle = NamedStyle(name="datetime", number_format="[$-x-systime]h:mm:ss AM/PM")
+    #     for i in range(2, ws.max_row + 1):
+    #         ws[f"A{i}"].style = dateStyle
+    #     ws.column_dimensions["A"].width = 20
+    #     ws.column_dimensions["B"].width = 10
+    #     return wb
 
 
 def insert_calculated_values(wb: Workbook, cv: dict, isMeter=False, csvDataSheet:CsvDataSheet=None):
@@ -482,7 +562,7 @@ def chart_process(wb:Workbook, csvDataSheet:CsvDataSheet):
                 # 5*6 여기까지
                 
 
-        elif csvDataSheet.type == "CO2" or csvDataSheet.type == "He" or csvDataSheet.type == "O2":
+        elif csvDataSheet.type == "CO2" or csvDataSheet.type == "He":
             ws = wb.active
             value = Reference(ws, min_row=1, max_row=ws.max_row, min_col=6, max_col=6)
             valueTime = Reference(ws, min_row=2, max_row=ws.max_row, min_col=3, max_col=3)
@@ -491,10 +571,26 @@ def chart_process(wb:Workbook, csvDataSheet:CsvDataSheet):
             chart.add_data(value, titles_from_data=True)
             chart.set_categories(valueTime)
             # stylesheet
-            type_kor_name = {'CO2':'이산화탄소(ppm)', 'He':'헬륨(%)', 'O2':'산소(%)'}
+            type_kor_name = {'CO2':'이산화탄소(ppm)', 'He':'헬륨(%)'}
             chart.title = type_kor_name[csvDataSheet.type]
             chart.x_axis.title = "Time(s)"
             # chart.y_axis.title = '이산화탄소(ppm)' if csvDataSheet.type == 'CO2' else '헬륨(%)'
+            chart.height = 13
+            chart.width = 19
+            ws.add_chart(chart, "B6")
+
+        elif csvDataSheet.type == "O2":
+            ws = wb.active
+            value = Reference(ws, min_row=1, max_row=ws.max_row, min_col=4, max_col=4)
+            valueTime = Reference(ws, min_row=2, max_row=ws.max_row, min_col=3, max_col=3)
+
+            chart = LineChart()
+            chart.add_data(value, titles_from_data=True)
+            chart.set_categories(valueTime)
+            # stylesheet
+            chart.title = 'O2(%)'
+            chart.x_axis.title = "Time(s)"
+            chart.y_axis.title = 'O2(%)'
             chart.height = 13
             chart.width = 19
             ws.add_chart(chart, "B6")

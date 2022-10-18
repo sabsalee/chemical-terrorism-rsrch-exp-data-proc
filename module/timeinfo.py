@@ -22,6 +22,7 @@ class TimeInfo:
             self.__exist = True
         else:
             self.timedatalist = time
+            # FIXME: 여기 시간이랑 관계된 중요한 오류가 발생할 수 있다.
             self.__exist = False
 
     def get_time(self) -> datetime:

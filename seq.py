@@ -156,7 +156,7 @@ def main():
             try:
                 bar = tqdm(total = 100, desc=f'[{i+1}/{len(lists)}] {e.name}', bar_format='{desc:30.28}{percentage:3.0f}%|{bar:30}|', smoothing=1)
 
-                df = preprocess_csv_to_df(e, time)
+                df = preprocess_to_df(e, time)
                 bar.update(20)
 
                 # 그래프 분석을 위한 데이터 생성
@@ -168,7 +168,7 @@ def main():
                 wb = dataframe_to_excel(df)
                 bar.update(10)
 
-                wb = formular_process(wb)
+                wb = formular_process(wb, e.type)
                 bar.update(10)
 
                 # if e.type != "dummy" and rtdb != None: # dummy 데이터 외(dummy는 total로만) 백업하기
