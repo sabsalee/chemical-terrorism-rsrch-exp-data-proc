@@ -322,13 +322,26 @@ def formular_process(wb:Workbook, t:str):
         ws = wb.active
         ws.insert_cols(2, 2)
         ws["C1"] = "경과시간(s)"
+        # 간격이 2초인 파일을 위해서 임시로 활성화시키는 기능 FIXME: 수정하지 않으면 오류가 난다.
+        # print('현재 간격이 2초 이상인 파일을 간격 1초로 조정하는 코드가 적용되었고, 평소에 이 코드가 적용되고 있으면 까먹고 켜놓은거니 나한테 연락ㄱㄱ.')
+        # input('엔터를 눌러서 계속...')
+        # weight = 0
+        # for i in range(2, ws.max_row*2 - 4):
+        #     minus = (ws[f'A{i + weight + 1}'].value - ws[f'A{i + weight}'].value).seconds
+        #     print(f'{i-1}번째 실행 중, {i + weight}번째 행을 조사하며 비교대상은 {i + weight + 1}번째 행입니다. 두 개의 차는 {minus}초 입니다.')
+        #     if minus > 1:
+        #         ws.insert_rows(i + weight + 1, 1)
+        #         ws[f'A{i + weight + 1}'] = ws[f'A{i + weight}'].value + timedelta(seconds=1)
+
+        #         ws[f'D{i + weight + 1}'] = ws[f'D{i + weight}'].value
+                
+        #         print(f'두 값의 차가 2초 이상이므로 {i + weight + 1}에 행을 삽입하였으며, 이제 그 행의 값은 [{ws[f"A{i + weight + 1}"].value.strftime("%H시 %M분 %S초")}]로 삽입되었습니다.')
+        # 여기까지 위의 기능
         for i in range(2, ws.max_row + 1):
             ws[f"C{i}"] = f"=ROUND((A{i}-$A$2)*24*60*60,0)"
         return wb
     except:
         pass
-
-# FIXME: 여기까지 일단 분석함
 
 def firebase_process(wb: Workbook, csvDataSheet: CsvDataSheet, __type: str) -> dict:
     dataDict = {}
